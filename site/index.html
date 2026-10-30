@@ -592,6 +592,18 @@ function amtOn(b,d){
   return a;
 }
 const annualOn=(b,d)=>amtOn(b,d)*(PER_YEAR[b.cadence]||12);
+/* Once a permanent change has started it becomes the bill's usual amount, and changes that can no
+   longer apply (ended, or replaced by a later permanent change) are dropped. Amounts on every
+   date from today on stay exactly the same. */
+function foldChanges(b,t){
+  const cs=b.changes||[];
+  if(!cs.some(c=>!c.until&&parseISO(c.from)<=t))return {amount:b.amount,changes:cs.filter(c=>!c.until||parseISO(c.until)>=t)};
+  // the permanent change in force today is the one amtOn would pick: latest start, later in the list on a tie
+  let p=null,pi=-1;cs.forEach((c,i)=>{if(!c.until&&parseISO(c.from)<=t&&(p==null||parseISO(c.from)>=parseISO(p.from))){p=c;pi=i;}});
+  const pf=parseISO(p.from);
+  return {amount:p.amount,changes:cs.filter((c,i)=>{const f=parseISO(c.from);return (f>pf||(f===pf&&i>pi))&&(!c.until||parseISO(c.until)>=t);})};
+}
+function foldAll(){const t=today();S.bills.forEach(b=>{if(!(b.changes||[]).length)return;const r=foldChanges(b,t);b.amount=r.amount;b.changes=r.changes;});}
 function changeNote(b,t){
   const cs=(b.changes||[]).map(c=>({...c,f:parseISO(c.from),u:c.until?parseISO(c.until):null})).filter(c=>c.f!=null&&(c.u==null||c.u>=t)).sort((x,y)=>x.f-y.f);
   const active=cs.filter(c=>c.f<=t&&c.u!=null).pop();
@@ -765,7 +777,7 @@ function cleanState(st,keepExample){
 /* ---------- storage ---------- */
 function load(){try{const raw=localStorage.getItem(KEY);if(raw){const o=JSON.parse(raw);if(o&&o.settings&&Array.isArray(o.bills))return cleanState(o,true);}}catch(e){}return null;}
 function persist(touch){
-  if(touch!==false)S.meta.changed=Date.now();
+  if(touch!==false){S.meta.changed=Date.now();foldAll();}
   if(SERVER_MODE){if(touch!==false&&typeof Sync!=='undefined'&&Sync&&Sync.mode==='on')queuePush();return;}
   try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}
 }
@@ -950,7 +962,8 @@ function changesListHtml(){
 }
 function editorHtml(b){
   const key=b?b.id:'new';
-  if(editChangesFor!==key){editChangesFor=key;editChanges=b&&Array.isArray(b.changes)?b.changes.map(c=>({...c})):[];}
+  const folded=b?foldChanges(b,today()):null;
+  if(editChangesFor!==key){editChangesFor=key;editChanges=folded?folded.changes.map(c=>({...c})):[];}
   const t=today();const nd=b?nextDue(b,t):null;
   const date=b?(nd!=null?toISO(nd):b.anchor):'';
   const cat=b?catOf(b.category).id:(catFilter!=='all'?catFilter:'other');
@@ -965,7 +978,7 @@ function editorHtml(b){
     :(b&&b.src==='auto'?`<p class="note">Found in your statements${b.seen?', '+plural(b.seen,'payment'):''}.</p>`:'');
   return `<div class="editor"><div class="fields">
     <div class="field wide"><label for="e-name">Name</label><input id="e-name" type="text" maxlength="60" value="${esc(b?b.name:'')}" placeholder="Electricity"></div>
-    <div class="field"><label for="e-amt">Amount ($)</label><input id="e-amt" type="number" inputmode="decimal" min="0" step="0.01" value="${b?b.amount:''}"></div>
+    <div class="field"><label for="e-amt">Amount ($)</label><input id="e-amt" type="number" inputmode="decimal" min="0" step="0.01" value="${b?folded.amount:''}"></div>
     <div class="field"><label for="e-cad">How often</label><select id="e-cad">${cads}</select></div>
     <div class="field"><label for="e-date">Next due</label><input id="e-date" type="date" value="${esc(date)}"></div>
     <div class="field"><label for="e-cat">Category</label><select id="e-cat">${opts}</select></div>
@@ -1014,7 +1027,7 @@ function viewBills(){
     return `<li class="${b.include?'':'off'} ${open?'open':''}"><button class="brow" data-act="edit" data-id="${esc(b.id)}" aria-expanded="${open}">
       <span class="dot" style="${cc(b.category)}"></span>
       <span><span class="bn">${esc(b.name)}</span><span class="bs">${S.people.some(x=>x.id===b.owner)?esc(ownerName(b.owner))+' · ':''}${esc(catOf(b.category).name)} · ${esc(cadLabel(b))}${nd!=null?' · next '+esc(fmtDay(nd)):''}${pills}</span></span>
-      <span class="bamt">${f2(cur)}${Math.abs(cur-b.amount)>0.004?`<small>usually ${f2(b.amount)}</small>`:''}</span><span class="chev"></span></button>
+      <span class="bamt">${f2(cur)}${Math.abs(cur-foldChanges(b,t).amount)>0.004?`<small>usually ${f2(foldChanges(b,t).amount)}</small>`:''}</span><span class="chev"></span></button>
       ${S.people.some(x=>x.id===b.owner)||open?'':`<div class="quickown"><label for="qo-${esc(b.id)}">Who pays this?</label><select id="qo-${esc(b.id)}" data-qown="${esc(b.id)}"><option value="">Choose…</option>${S.people.map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('')}</select></div>`}
       ${dp?`<div class="dup"><p>Looks like a double-up of <strong>${esc(dp.other.name)}</strong>: ${esc(dp.why)}.</p><div class="btnrow"><button class="btn small ghost" data-act="dupKeep" data-key="${esc(dp.key)}">Not a double-up</button><button class="btn small danger" data-act="delBill" data-id="${esc(b.id)}">${confirmDel===b.id?'Tap again to remove':'Remove this one'}</button></div></div>`:''}
       ${open?editorHtml(b):''}</li>`;
