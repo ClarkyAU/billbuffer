@@ -47,7 +47,7 @@ body{
 h1{font:700 22px/1.1 var(--f-body);letter-spacing:-.01em;margin:0}
 .top{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
 .top small{color:var(--muted);font:500 12px var(--f-num)}
-.tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:2px;padding:3px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2px;padding:3px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
 .tab{font:600 13.5px var(--f-body);color:var(--muted);background:none;border:0;border-radius:7px;min-height:40px;padding:0 2px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tab[aria-selected="true"]{background:var(--ink);color:var(--bg)}
 button{font-family:inherit}
@@ -71,6 +71,7 @@ button{font-family:inherit}
 .hrow .l small{display:block;opacity:.8;font-size:12px}
 .hrow .v{font:600 18px var(--f-num);font-variant-numeric:tabular-nums;white-space:nowrap}
 .hpill{font:600 11px var(--f-num);letter-spacing:.06em;text-transform:uppercase;background:var(--accent-ink);color:var(--accent);padding:4px 8px;border-radius:99px;white-space:nowrap}
+.hpill.bad{background:var(--bad);color:var(--surface);font-size:12px;padding:5px 10px}
 
 .pill{display:inline-block;font:600 10.5px var(--f-num);letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:99px;vertical-align:1px;white-space:nowrap}
 .pill.good{background:var(--good-soft);color:var(--good)}
@@ -229,6 +230,16 @@ details[open] .chev{transform:rotate(-135deg);margin-top:3px}
 .pbill .a{font:600 14px var(--f-num);font-variant-numeric:tabular-nums;white-space:nowrap}
 .pfoot{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;color:var(--muted);font-size:13px}
 .pblock .editor{padding:0}
+.topr{display:flex;align-items:center;gap:10px}
+.gear{width:40px;height:40px;display:grid;place-items:center;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);cursor:pointer}
+.gear[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.sethead{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.sethead h2{font:700 20px/1.2 var(--f-body);margin:0}
+.sechd{font:600 11px var(--f-num);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:10px 0 -4px}
+.balrow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:end}
+.balrow .note{margin:0 0 10px}
+.linkbtn{background:none;border:0;padding:0;font:inherit;color:var(--accent);text-decoration:underline;cursor:pointer}
+@media (max-width:380px){.balrow{grid-template-columns:1fr}}
 .quickown{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:center;margin:0 16px 12px;padding:8px 10px;border-radius:10px;background:var(--warn-soft);color:var(--warn);font-weight:600;font-size:14px}
 .quickown select{min-height:40px;background:var(--surface)}
 .txbox{margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)}
@@ -701,6 +712,7 @@ const fmtLong=n=>new Date(n*864e5).toLocaleDateString('en-AU',{day:'numeric',mon
 const fmtFull=n=>new Date(n*864e5).toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long',timeZone:'UTC'});
 const fmtMonth=(y,m)=>new Date(Date.UTC(y,m,1)).toLocaleDateString('en-AU',{month:'long',year:'numeric',timeZone:'UTC'});
 const ord=n=>{const v=n%100;if(v>=11&&v<=13)return n+'th';return n+(({1:'st',2:'nd',3:'rd'})[n%10]||'th');};
+const poss=n=>n==='You'?'Your':n+(/s$/i.test(n)?"'":"'s");
 const plural=(n,w,pl)=>n+' '+(n===1?w:(pl||w+'s'));
 function ago(ts){
   if(!ts)return null;const t=typeof ts==='number'?ts:Date.parse(ts);if(!t)return null;
@@ -727,12 +739,12 @@ const exampleBanner=()=>S.example?`<section class="banner"><p><strong>Example da
 function heroHtml(P){
   const sub=P.nAct
     ?`What the balance should be today${P.todayPays.length?', after today\'s pay-ins':''}. It covers every bill due up to ${esc(fmtDay(P.until-1))} without dropping below your ${f0(P.buf)} buffer, counting the pay-ins due before then.`
-    :`No bills are in the plan yet. Import 2 or 3 months of statements, or add bills on the Bills tab.`;
+    :`No bills are in the plan yet. Import 2 or 3 months of statements in Settings, or add bills on the Bills tab.`;
   let rows='';
   if(P.bal!=null){
     const diff=P.bal-P.required;
-    const waiting=P.todayPays.length&&diff<-0.004?` · ${esc(P.todayPays.map(e=>e.person.name).join(' and '))}'s pay-in due today may not be in yet`:'';
-    rows+=`<div class="hrow"><div class="l">In the account<small>${f2(P.bal)}${waiting}</small></div><span class="hpill">${diff<-0.004?'Short '+up(-diff):down(diff)+' spare'}</span></div>`;
+    const waiting=P.todayPays.length&&diff<-0.004?` · ${esc(P.todayPays.length===1?poss(P.todayPays[0].person.name):P.todayPays.map(e=>e.person.name).join(' and ')+"'s")} pay-in due today may not be in yet`:'';
+    rows+=`<div class="hrow"><div class="l">In the account<small>${f2(P.bal)}${waiting}</small></div><span class="hpill ${diff<-0.004?'bad':''}">${diff<-0.004?'Short '+up(-diff):down(diff)+' spare'}</span></div>`;
   }
   P.people.forEach(r=>{
     const isToday=r.next===P.t;
@@ -742,7 +754,7 @@ function heroHtml(P){
 }
 function warnHtml(P){
   const out=[];
-  if(P.missing.length)out.push(`Add a next payday for ${esc(P.missing.join(' and '))} under "Who puts in what". Until then their pay-ins aren't counted, which pushes the number above up.`);
+  if(P.missing.length)out.push(`Add a next payday for ${esc(P.missing.join(' and '))} in Settings. Until then their pay-ins aren't counted, which pushes the number above up.`);
   if(P.unassigned.length)out.push(`${plural(P.unassigned.length,'bill')} ${P.unassigned.length===1?'has':'have'} no owner yet, so nobody's pay-in covers ${P.unassigned.length===1?'it':'them'} and the number above includes the full cost of anything due before then. <button class="btn small" data-act="showUnassigned">Assign owners</button>`);
   P.people.filter(r=>r.custom&&r.payIn+0.5<r.perPay).forEach(r=>out.push(`${esc(r.p.name)}'s pay-in is ${f2(r.perPay-r.payIn)} less than their bills cost per pay, so the account will run down over time. Watch for "Below buffer" in the coming fortnights.`));
   return out.length?`<section class="banner">${out.map(x=>`<p>${x}</p>`).join('')}</section>`:'';
@@ -767,16 +779,14 @@ function personHtml(P){
       <span class="a">${f2(b.amount)}</span></button></li>`;};
   const byDue=(a,b)=>((nextDue(a,t)??1e9)-(nextDue(b,t)??1e9));
   const blocks=P.people.map(r=>{
-    const id=r.p.id,open=editingP===id;
+    const id=r.p.id;
     const bills=S.bills.filter(b=>b.include&&b.owner===id).sort(byDue);
-    return `<details class="pblock ${open?'open':''}" data-pid="${esc(id)}" ${open||openPeople.has(id)?'open':''}>
+    return `<details class="pblock" data-pid="${esc(id)}" ${openPeople.has(id)?'open':''}>
       <summary class="ptop"><div><div class="pname">${esc(r.p.name)}</div>
         <div class="bs">${esc(r.f.label)}${r.next!=null?' · next payday '+esc(fmtDay(r.next)):' <span class="pill warn">No payday</span>'} · ${plural(bills.length,'bill')}</div></div>
         <div class="ppay"><small>Puts in</small>${f0(r.payIn)}</div><span class="chev"></span></summary>
       ${bills.length?`<ul class="pbills">${bills.map(billRow).join('')}</ul>`:'<p class="note">No bills yet. Pick this person as "Who pays" on a bill.</p>'}
-      <div class="pfoot"><span>${f2(r.perPay)} per pay${r.custom?' · set amount':''}</span>
-        <button class="btn small ghost" data-act="pedit" data-id="${esc(id)}" aria-expanded="${open}">${open?'Close':'Edit'}</button></div>
-      ${open?personEditor(r):''}</details>`;
+      <div class="pfoot"><span>${f2(r.perPay)} per pay${r.custom?' · set amount':''}</span></div></details>`;
   }).join('');
   const none=S.bills.filter(b=>b.include&&!S.people.some(x=>x.id===b.owner)).sort(byDue);
   const noneBlock=none.length?`<details class="pblock nobody" data-pid="__none" ${openPeople.has('__none')?'open':''}><summary class="ptop"><div><div class="pname">No owner yet</div><div class="bs">${plural(none.length,'bill')} nobody's pay-in covers</div></div><span></span><span class="chev"></span></summary>
@@ -784,7 +794,7 @@ function personHtml(P){
       <div class="pfoot"><span></span><button class="btn small" data-act="showUnassigned">Assign owners</button></div></details>`:'';
   return `<section class="card flush"><div class="hd"><h2>Who puts in what</h2><p>Each person pays all of the bills they own, spread across their own pay cycle. Tap someone to see their bills.</p></div>
     ${blocks}${noneBlock}
-    ${editingP==='new'?`<div class="pblock open"><div class="pname">New person</div>${personEditor(null)}</div>`:`<div style="padding:12px 16px 16px;border-top:1px solid var(--line)"><button class="btn" data-act="pnew">Add a person</button></div>`}</section>`;
+    <p class="note" style="padding:0 16px 16px;margin:0;border-top:1px solid var(--line);padding-top:12px">To add someone or change a payday, open <button class="linkbtn" data-act="openSettings">Settings</button>.</p></section>`;
 }
 function catHtml(P){
   if(!P.catRows.length)return '';
@@ -817,10 +827,8 @@ function segHtml(P){
 }
 function settingsHtml(){
   const s=S.settings;
-  return `<section class="card"><h2>The account</h2><div class="fields">
-    <div class="field"><label for="s-bal">Balance now ($)</label><input id="s-bal" type="number" inputmode="decimal" step="0.01" data-s="balance" value="${esc(s.balance)}" placeholder="Optional"></div>
-    <div class="field"><label for="s-buf">Safety buffer ($)</label><input id="s-buf" type="number" inputmode="decimal" min="0" step="10" data-s="buffer" value="${esc(s.buffer)}"></div>
-  </div><p class="note">Add the balance to see if the account is short right now.</p></section>`;
+  return `<section class="card"><div class="balrow"><div class="field"><label for="s-bal">Balance now ($)</label><input id="s-bal" type="number" inputmode="decimal" step="0.01" data-s="balance" value="${esc(s.balance)}" placeholder="What's in the account"></div>
+    <p class="note">Enter what's in the account to see if it's short.</p></div></section>`;
 }
 function viewNow(){
   const P=computePlan();
@@ -945,29 +953,53 @@ function viewBills(){
     const perMonth=all.reduce((n,b)=>n+annual(b)/12,0);
     const owners=[...new Set(all.map(b=>ownerName(b.owner)))];
     return `<li class="grp"><div class="ghead"><span class="gname">${esc((S.bills.find(b=>grpOf(b)===blk.g&&b.gname)||{}).gname||titleCase(blk.g))}</span><span class="gmeta">${plural(grpSize.get(blk.g),'bill')} · about ${f2(perMonth)} a month · ${esc(owners.join(', ')||'No owner')}</span></div><ul class="blist sub">${blk.rows.map(rowHtml).join('')}</ul></li>`;
-  }).join(''):`<li class="empty">${S.bills.length?'No bills match these filters.':'No bills yet. Import statements or add one.'}</li>`;
-  const cats=S.categories.map(c=>`<li style="${cc(c.id)}"><button class="swatch" data-act="catColor" data-id="${esc(c.id)}" aria-label="Change colour for ${esc(c.name)}"></button>
-    <input type="text" id="cat-${esc(c.id)}" data-cat="${esc(c.id)}" maxlength="40" value="${esc(c.name)}" aria-label="Category name">
-    <span class="ccount">${plural(counts.get(c.id)||0,'bill')}</span>
-    ${c.id==='other'?'<span></span>':`<button class="x ${confirmCat===c.id?'confirm':''}" data-act="catDel" data-id="${esc(c.id)}" aria-label="Delete ${esc(c.name)}">${confirmCat===c.id?'Sure?':'×'}</button>`}</li>`).join('');
-  return exampleBanner()
+  }).join(''):`<li class="empty">${S.bills.length?'No bills match these filters.':'No bills yet. Import statements in Settings, or add one.'}</li>`;
+    return exampleBanner()
     +(dupCount?`<section class="banner"><p><strong>${plural(dupCount,'possible double-up')}.</strong> Some bills look like the same thing counted twice, which inflates your numbers. They're marked below.</p></section>`:'')
     +`${ochips}${chips}<section class="card flush"><div class="hd"><h2>Bills</h2><p>Tap a bill to change its name, amount, timing or category.</p></div>
       ${editing==='new'?`<div class="hd" style="padding-top:0"><h2>New bill</h2></div>${editorHtml(null)}`:''}
       <ul class="blist">${list}</ul>
-      ${editing==='new'?'':`<div style="padding:0 16px 16px"><button class="btn" data-act="new">Add a bill</button></div>`}${msgHtml('bills')}</section>
-    <section class="card"><h2>Categories</h2><p>Group bills by type, for example housing or utilities. Tap a colour to change it.</p>
+      ${editing==='new'?'':`<div style="padding:0 16px 16px"><button class="btn" data-act="new">Add a bill</button></div>`}${msgHtml('bills')}</section>`;
+}
+function categoriesHtml(){
+  const counts=new Map();S.bills.forEach(b=>{const c=catOf(b.category).id;counts.set(c,(counts.get(c)||0)+1);});
+  const cats=S.categories.map(c=>`<li style="${cc(c.id)}"><button class="swatch" data-act="catColor" data-id="${esc(c.id)}" aria-label="Change colour for ${esc(c.name)}"></button>
+    <input type="text" id="cat-${esc(c.id)}" data-cat="${esc(c.id)}" maxlength="40" value="${esc(c.name)}" aria-label="Category name">
+    <span class="ccount">${plural(counts.get(c.id)||0,'bill')}</span>
+    ${c.id==='other'?'<span></span>':`<button class="x ${confirmCat===c.id?'confirm':''}" data-act="catDel" data-id="${esc(c.id)}" aria-label="Delete ${esc(c.name)}">${confirmCat===c.id?'Sure?':'×'}</button>`}</li>`).join('');
+  return `<section class="card" id="set-categories"><h2>Categories</h2><p>Group bills by type, for example housing or utilities. Tap a colour to change it.</p>
       <ul class="cats">${cats}</ul>
       <div class="addcat"><input id="newCat" type="text" maxlength="40" placeholder="New category" aria-label="New category name"><button class="btn small" data-act="catAdd">Add</button></div></section>`;
 }
+function peopleSettingsHtml(){
+  const P=computePlan();
+  const rows=P.people.map(r=>{const id=r.p.id,open=editingP===id;
+    return `<li class="${open?'open':''}"><button class="brow" data-act="pedit" data-id="${esc(id)}" aria-expanded="${open}">
+      <span class="dot" style="--cc:var(--accent)"></span>
+      <span><span class="bn">${esc(r.p.name)}</span><span class="bs">${esc(r.f.label)}${r.next!=null?' · next payday '+esc(fmtDay(r.next)):''}${r.next==null?' <span class="pill warn">No payday</span>':''}${r.custom?' · set amount':''}</span></span>
+      <span class="bamt">${f0(r.payIn)}</span><span class="chev"></span></button>${open?personEditor(r):''}</li>`;}).join('');
+  return `<section class="card flush" id="set-people"><div class="hd"><h2>People</h2><p>Who puts money into the account, when they're paid, and how much goes in each payday.</p></div>
+    <ul class="blist">${rows}</ul>
+    ${editingP==='new'?`<div class="hd" style="padding-top:8px"><h2>New person</h2></div>${personEditor(null)}`:`<div style="padding:12px 16px 16px"><button class="btn" data-act="pnew">Add a person</button></div>`}</section>`;
+}
+function viewSettings(){
+  const s=S.settings;
+  return `<div class="sethead"><h2>Settings</h2><button class="btn small ghost" data-act="tab" data-tab="now">Done</button></div>
+    ${exampleBanner()}${peopleSettingsHtml()}
+    <section class="card"><h2>The account</h2><div class="fields"><div class="field"><label for="s-buf">Safety buffer ($)</label><input id="s-buf" type="number" inputmode="decimal" min="0" step="10" data-s="buffer" value="${esc(s.buffer)}"></div></div>
+      <p class="note">The least you want left in the account at any time.</p></section>
+    ${categoriesHtml()}
+    <h3 class="sechd">Statements</h3>${viewImport(true)}
+    <h3 class="sechd">Sharing, backup and reset</h3>${viewBackup()}`;
+}
 
 /* ---------- Import and Backup tabs ---------- */
-function viewImport(){
+function viewImport(inSettings){
   const ds=S.txns.map(t=>t.d);const span=ds.length?Math.max(...ds)-Math.min(...ds)+1:0;
   const cov=!span?'':span>=60?`<span class="pill good">Good</span>`:span>=30?`<span class="pill warn">Add more</span>`:`<span class="pill bad">Too short</span>`;
   const covTxt=span?`${plural(span,'day')} covered, ${fmtLong(Math.min(...ds))} to ${fmtLong(Math.max(...ds))}`:'Nothing imported yet';
   const files=S.files.length?`<ul class="files">${S.files.map(f=>`<li><span>${esc(f.name)}</span><span>${esc(fmtShort(f.from))} – ${esc(fmtShort(f.to))} · ${f.added} new</span></li>`).join('')}</ul>`:'';
-  return `${exampleBanner()}<section class="card"><h2>Add statements</h2><p>Use 2 or 3 months of CSV downloads from your bank. A bill needs to show up at least twice to be spotted. Bills you've edited or deleted stay that way when you import more.</p>
+  return `${inSettings?'':exampleBanner()}<section class="card"><h2>Add statements</h2><p>Use 2 or 3 months of CSV downloads from your bank. A bill needs to show up at least twice to be spotted. Bills you've edited or deleted stay that way when you import more.</p>
     <div class="btnrow"><label class="btn filebtn">Choose CSV files<input id="fileCsv" type="file" accept=".csv,.txt,text/csv,text/plain" multiple></label></div>
     <div class="field" style="margin-top:14px"><label for="pasteBox">Or paste rows</label><textarea id="pasteBox" placeholder="Date,Amount,Description&#10;03/09/2026,-1850.00,RENT PAYMENT"></textarea></div>
     <div class="btnrow"><button class="btn ghost" data-act="pasteImport">Add pasted rows</button></div>${msgHtml('import')}</section>
@@ -1148,7 +1180,8 @@ async function loadDevices(){
 }
 
 function render(){
-  const tabs=[['now','Now'],['calendar','Calendar'],['bills','Bills'],['import','Import'],['backup','Data']];
+  const tabs=[['now','Now'],['calendar','Calendar'],['bills','Bills']];
+  const gear=`<button class="gear" data-act="tab" data-tab="settings" aria-label="Settings" aria-pressed="${tab==='settings'}"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3.3h-4l-.4 2.6a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.4 7.4 0 0 0 1.7 1l.4 2.6h4l.4-2.6a7.4 7.4 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg></button>`;
   if(Sync.mode==='loading'){$('#app').innerHTML=`<div class="top"><h1>Bill Buffer</h1><small id="syncChip">Loading…</small></div><section class="card"><p>Loading your bills from the server…</p></section>`;return;}
   if(Sync.mode==='on'&&Sync.down&&serverVersion===0&&!Sync.lastOk){$('#app').innerHTML=`<div class="top"><h1>Bill Buffer</h1>${syncChip()}</div>${downHtml()}`;return;}
   if(Sync.mode==='signin'||Sync.mode==='nopass'){
@@ -1156,10 +1189,11 @@ function render(){
     const f=$('#si-pass');if(f&&Sync.mode==='signin')f.focus();
     return;
   }
-  const body=tab==='now'?viewNow():tab==='calendar'?viewCalendar():tab==='bills'?viewBills():tab==='import'?viewImport():viewBackup();
-  $('#app').innerHTML=`<div class="top"><h1>Bill Buffer</h1>${syncChip()}</div>
+  if(!['now','calendar','bills','settings'].includes(tab))tab='settings';
+  const body=tab==='now'?viewNow():tab==='calendar'?viewCalendar():tab==='bills'?viewBills():viewSettings();
+  $('#app').innerHTML=`<div class="top"><h1>Bill Buffer</h1><div class="topr">${syncChip()}${gear}</div></div>
     <nav class="tabs" role="tablist">${tabs.map(([k,l])=>`<button class="tab" role="tab" aria-selected="${tab===k}" data-act="tab" data-tab="${k}">${l}</button>`).join('')}</nav>${Sync.down&&Sync.mode==='on'?`<section class="banner"><p><strong>Not connected to your server.</strong> Changes can't be saved until it's back.</p><button class="btn small" data-act="retry">Try again</button></section>`:''}${noticeHtml()}${body}`;
-  if(tab==='backup'&&Sync.mode==='on'&&!Sync.open)loadDevices();
+  if(tab==='settings'&&Sync.mode==='on'&&!Sync.open)loadDevices();
 }
 
 /* ---------- actions ---------- */
@@ -1296,7 +1330,8 @@ document.addEventListener('click',async e=>{
   if(a!=='delBill')confirmDel=null;
   if(a!=='catDel')confirmCat=null;
   if(a!=='pdel')confirmPerson=null;
-  if(a==='tab'){tab=el.dataset.tab;msg=null;pendingRestore=null;editing=null;editingP=null;render();}
+  if(a==='tab'){tab=el.dataset.tab;msg=null;pendingRestore=null;editing=null;editingP=null;render();window.scrollTo(0,0);}
+  else if(a==='openSettings'){tab='settings';msg=null;editing=null;render();const s=$('#set-people');if(s)s.scrollIntoView({block:'start'});}
   else if(a==='clearExample'){clearExampleData();persist();render();}
   else if(a==='edit'){const id=el.dataset.id;editing=editing===id?null:id;msg=null;render();}
   else if(a==='new'){editing='new';msg=null;render();const n=$('#e-name');if(n)n.focus();}
@@ -1350,7 +1385,7 @@ document.addEventListener('click',async e=>{
   }
   else if(a==='reset'){
     const k=el.dataset.kind;
-    if(confirmReset!==k){confirmReset=k;clearTimeout(clearTimer);clearTimer=setTimeout(()=>{confirmReset=null;if(tab==='backup')render();},5000);render();return;}
+    if(confirmReset!==k){confirmReset=k;clearTimeout(clearTimer);clearTimer=setTimeout(()=>{confirmReset=null;if(tab==='settings')render();},5000);render();return;}
     confirmReset=null;editing=null;editingP=null;catFilter='all';ownFilter='all';openSeg.clear();calY=null;
     const keepMeta=S.meta;
     if(k==='statements'){S.txns=[];S.files=[];S.hidden=[];S.bills=S.bills.filter(b=>b.src!=='auto'||b.locked);S.example=false;setMsg('reset','Statements cleared. Your own and edited bills are still there.','good');}
