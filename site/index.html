@@ -245,7 +245,7 @@ function guessCategory(n){
   return 'other';
 }
 
-const DEFAULT_PEOPLE=()=>[{id:'p1',name:'You',share:50,nextPayday:'',freq:'fortnightly',payIn:''},{id:'p2',name:'Partner',share:50,nextPayday:'',freq:'fortnightly',payIn:''}];
+const DEFAULT_PEOPLE=()=>[{id:'p1',name:'You',nextPayday:'',freq:'fortnightly',payIn:''},{id:'p2',name:'Partner',nextPayday:'',freq:'fortnightly',payIn:''}];
 const FREQ={weekly:{label:'Every week',days:7,per:365.25/7},fortnightly:{label:'Every fortnight',days:14,per:365.25/14},'4weekly':{label:'Every 4 weeks',days:28,per:365.25/28},monthly:{label:'Every month',per:12}};
 const freqFromDays=n=>+n===7?'weekly':+n===28?'4weekly':'fortnightly';
 let S=null;
@@ -394,7 +394,7 @@ function redetect(){
     if(hidden.has(f.id))return;
     const o=old.get(f.id);const g=guessCategory(f.name);
     f.include=o?o.include:f.include;
-    f.owner=o&&o.owner?o.owner:'shared';
+    f.owner=o&&o.owner?o.owner:'';
     f.category=o&&ids.has(o.category)?o.category:(ids.has(g)?g:'other');
     fresh.push(f);
   });
@@ -457,14 +457,13 @@ function computePlan(){
   const perFn=[...cat.values()].reduce((a,b)=>a+b,0);
   const catRows=S.categories.map(c=>({c,v:cat.get(c.id)||0})).filter(r=>r.v>0).sort((a,b)=>b.v-a.v);
   const ppl=S.people,pids=new Set(ppl.map(x=>x.id));
-  const totShare=ppl.reduce((n,x)=>n+Math.max(0,+x.share||0),0);
-  const frac=x=>totShare>0?Math.max(0,+x.share||0)/totShare:1/ppl.length;
-  const yr=new Map(ppl.map(x=>[x.id,{own:0,shared:0}]));
-  act.forEach(b=>{const v=annual(b);if(pids.has(b.owner))yr.get(b.owner).own+=v;else ppl.forEach(x=>{yr.get(x.id).shared+=v*frac(x);});});
+  const yr=new Map(ppl.map(x=>[x.id,0]));
+  const unassigned=act.filter(b=>!pids.has(b.owner));
+  act.forEach(b=>{if(pids.has(b.owner))yr.set(b.owner,yr.get(b.owner)+annual(b));});
   const people=ppl.map(x=>{
-    const f=FREQ[x.freq]||FREQ.fortnightly,y=yr.get(x.id),perPay=(y.own+y.shared)/f.per,sugg=Math.ceil(perPay-1e-9);
+    const f=FREQ[x.freq]||FREQ.fortnightly,y=yr.get(x.id),perPay=y/f.per,sugg=Math.ceil(perPay-1e-9);
     const custom=x.payIn!==''&&x.payIn!=null&&!isNaN(+x.payIn),payIn=custom?Math.max(0,+x.payIn):sugg,dates=payDates(x,t,end);
-    return {p:x,f,own:y.own/f.per,shared:y.shared/f.per,frac:frac(x),perPay,sugg,custom,payIn,next:dates.length?dates[0]:null,dates};
+    return {p:x,f,nBills:act.filter(b=>b.owner===x.id).length,perPay,sugg,custom,payIn,next:dates.length?dates[0]:null,dates};
   });
   const missing=people.filter(r=>r.next==null).map(r=>r.p.name);
   const ev=[];
@@ -485,7 +484,7 @@ function computePlan(){
   }
   const avg=segs.reduce((n,g)=>n+g.total,0)/segs.length;
   segs.forEach(g=>{g.tight=g.total>=avg*1.2&&g.total-avg>=50;});
-  return {t,buf,required,bal,start,segs,days,catRows,perFn,people,missing,nAct:act.length,end,nextPay:ev.find(e=>e.pay)||null};
+  return {t,buf,required,bal,start,segs,days,catRows,perFn,people,missing,unassigned,nAct:act.length,end,nextPay:ev.find(e=>e.pay)||null};
 }
 
 /* ---------- example data shown on first open ---------- */
@@ -509,7 +508,7 @@ function buildExample(){
   {const [yy,mm]=ymd(t);let d15=D(yy,mm,15);if(d15<t)d15=addMonths(d15,1,15);s.people[1].nextPayday=toISO(d15);s.people[1].freq='monthly';}
   const prev=S;S=s;redetect();S=prev;
   const [y,m]=ymd(t);let d18=D(y,m,18);if(d18<t)d18=addMonths(d18,1,18);
-  s.bills.forEach(b=>{if(/TELSTRA/i.test(b.name))b.owner='p1';else if(/FITNESS/i.test(b.name))b.owner='p2';});
+  s.bills.forEach(b=>{b.owner=/TELSTRA|RENT|MEDIBANK/i.test(b.name)?'p1':'p2';});
   s.bills.push({id:'m:example-rego',name:'Car rego',amount:890,cadence:'yearly',anchor:toISO(t+40),dom:ymd(t+40)[2],include:true,src:'manual',locked:true,category:'insurance',owner:'p2'});
   s.bills.push({id:'m:example-phone',name:'Phone plan',amount:65,cadence:'monthly',anchor:toISO(d18),dom:18,include:true,src:'manual',locked:true,category:'utilities',owner:'p1'});
   return s;
@@ -528,7 +527,7 @@ function cleanState(st,keepExample){
   if(Array.isArray(st.people)){
     const seenP=new Set();
     d.people=st.people.filter(x=>x&&str(x.id)&&x.id!=='shared'&&str(x.name)&&x.name.trim()&&!seenP.has(x.id)&&seenP.add(x.id))
-      .map(x=>({id:x.id,name:x.name.trim().slice(0,30),share:num(+x.share)&&+x.share>=0?+x.share:50,
+      .map(x=>({id:x.id,name:x.name.trim().slice(0,30),
         nextPayday:parseISO(x.nextPayday)!=null?x.nextPayday:'',freq:FREQ[x.freq]?x.freq:'',payIn:(x.payIn===''||x.payIn==null||isNaN(+x.payIn))?'':+x.payIn}));
     if(!d.people.length)d.people=DEFAULT_PEOPLE();
   }
@@ -541,7 +540,7 @@ function cleanState(st,keepExample){
   d.bills=(Array.isArray(st.bills)?st.bills:[]).filter(b=>b&&str(b.id)&&str(b.name)&&num(b.amount)&&PER_YEAR[b.cadence]&&parseISO(b.anchor)!=null)
     .map(b=>{const g=guessCategory(b.name);return Object.assign({},b,{
       include:!!b.include,dom:num(b.dom)?b.dom:ymd(parseISO(b.anchor))[2],src:b.src==='auto'?'auto':'manual',
-      locked:!!(b.locked||b.edited||b.src!=='auto'),owner:pids.has(b.owner)?b.owner:'shared',category:ids.has(b.category)?b.category:(ids.has(g)?g:'other')});});
+      locked:!!(b.locked||b.edited||b.src!=='auto'),owner:pids.has(b.owner)?b.owner:'',category:ids.has(b.category)?b.category:(ids.has(g)?g:'other')});});
   d.hidden=(Array.isArray(st.hidden)?st.hidden:[]).filter(str);
   d.notDup=(Array.isArray(st.notDup)?st.notDup:[]).filter(str);
   d.txns=(Array.isArray(st.txns)?st.txns:[]).filter(t=>t&&num(t.d)&&num(t.a)&&str(t.t));
@@ -585,7 +584,7 @@ const cadLabel=b=>{const dm=b.dom||ymd(parseISO(b.anchor))[2];
   return b.cadence==='weekly'?'Weekly':b.cadence==='fortnightly'?'Every 2 weeks':b.cadence==='quarterly'?'Every 3 months':b.cadence==='yearly'?'Yearly':'Monthly on the '+ord(dm);};
 const catOf=id=>S.categories.find(c=>c.id===id)||S.categories.find(c=>c.id==='other')||{id:'other',name:'Other',color:4};
 const cc=id=>`--cc:var(--k${catOf(id).color%8})`;
-const ownerName=id=>{const x=S.people.find(q=>q.id===id);return x?x.name:'Shared';};
+const ownerName=id=>{const x=S.people.find(q=>q.id===id);return x?x.name:'No owner';};
 
 /* ---------- view state ---------- */
 let tab='now',msg=null,pendingRestore=null,confirmClear=false,dl=null,clearTimer=null;
@@ -615,6 +614,7 @@ function heroHtml(P){
 function warnHtml(P){
   const out=[];
   if(P.missing.length)out.push(`Add a next payday for ${esc(P.missing.join(' and '))} under "Who puts in what". Until then their pay-ins aren't counted, which pushes the number above up.`);
+  if(P.unassigned.length)out.push(`${plural(P.unassigned.length,'bill')} ${P.unassigned.length===1?'has':'have'} no owner yet, so nobody's pay-in covers ${P.unassigned.length===1?'it':'them'} and the number above is higher than it should be. <button class="btn small" data-act="showUnassigned">Assign owners</button>`);
   P.people.filter(r=>r.custom&&r.payIn+0.5<r.perPay).forEach(r=>out.push(`${esc(r.p.name)}'s pay-in is ${f2(r.perPay-r.payIn)} less than their bills cost per pay, so the account runs down over time. The number above covers that gap for 12 months.`));
   return out.length?`<section class="banner">${out.map(x=>`<p>${x}</p>`).join('')}</section>`:'';
 }
@@ -625,23 +625,20 @@ function personEditor(r){
     <div class="field wide"><label for="p-name">Name</label><input id="p-name" type="text" maxlength="30" value="${esc(x?x.name:'')}" placeholder="Sam"></div>
     <div class="field"><label for="p-pay">Next payday</label><input id="p-pay" type="date" value="${esc(x?x.nextPayday:'')}"></div>
     <div class="field"><label for="p-freq">Gets paid</label><select id="p-freq">${freqs}</select></div>
-    <div class="field"><label for="p-share">Share of shared bills</label><span class="pct"><input id="p-share" type="number" inputmode="decimal" min="0" max="100" step="1" value="${x?esc(x.share):Math.round(100/(n+1))}"><i>%</i></span></div>
-    <div class="field"><label for="p-in">Puts in each payday ($)</label><input id="p-in" type="number" inputmode="decimal" min="0" step="1" value="${x?esc(x.payIn):''}" placeholder="${r?'Auto: '+esc(f0(r.sugg)):'Auto'}"></div>
-  </div><p class="note">Leave "Puts in each payday" empty to use what their bills cost per pay. ${x?'':'Adding someone with the suggested share splits shared bills evenly between everyone.'}</p>
+    <div class="field wide"><label for="p-in">Puts in each payday ($)</label><input id="p-in" type="number" inputmode="decimal" min="0" step="1" value="${x?esc(x.payIn):''}" placeholder="${r?'Auto: '+esc(f0(r.sugg)):'Auto'}"></div>
+  </div><p class="note">Leave "Puts in each payday" empty to use what their bills cost per pay.</p>
   <div class="btnrow"><button class="btn" data-act="psave">${x?'Save':'Add person'}</button><button class="btn ghost" data-act="pcancel">Cancel</button>
   ${x&&n>1?`<button class="btn danger" data-act="pdel" data-id="${esc(x.id)}">${confirmPerson===x.id?'Tap again to remove':'Remove'}</button>`:''}</div>${msgHtml('person')}</div>`;
 }
 function personHtml(P){
-  const tot=S.people.reduce((n,x)=>n+(+x.share||0),0);
   const list=P.people.map(r=>{const id=r.p.id,open=editingP===id;
     return `<li class="${open?'open':''}"><button class="brow" data-act="pedit" data-id="${esc(id)}" aria-expanded="${open}">
       <span class="dot" style="--cc:var(--accent)"></span>
       <span><span class="bn">${esc(r.p.name)}</span><span class="bs">${esc(r.f.label)}${r.next!=null?' · next '+esc(fmtDay(r.next)):''}${r.next==null?' <span class="pill warn">No payday</span>':''}</span>
-      <span class="bs">Own bills ${f2(r.own)} + ${Math.round(r.frac*100)}% of shared ${f2(r.shared)} per pay${r.custom?' · set amount':''}</span></span>
+      <span class="bs">${plural(r.nBills,'bill')}, ${f2(r.perPay)} per pay${r.custom?' · set amount':''}</span></span>
       <span class="bamt">${f0(r.payIn)}</span><span class="chev"></span></button>${open?personEditor(r):''}</li>`;}).join('');
-  return `<section class="card flush"><div class="hd"><h2>Who puts in what</h2><p>Each person covers their own bills plus their share of the shared ones, spread across their own pay cycle. Tap someone to change their payday, share or amount.</p></div>
+  return `<section class="card flush"><div class="hd"><h2>Who puts in what</h2><p>Each person pays all of the bills they own, spread across their own pay cycle. Tap someone to change their payday or amount.</p></div>
     <ul class="blist">${list}</ul>
-    ${Math.round(tot)!==100?`<p class="note" style="padding:0 16px">Shares add up to ${Math.round(tot)}%, so they're treated as proportions.</p>`:''}
     ${editingP==='new'?`<div class="hd" style="padding-top:8px"><h2>New person</h2></div>${personEditor(null)}`:`<div style="padding:12px 16px 16px"><button class="btn" data-act="pnew">Add a person</button></div>`}</section>`;
 }
 function catHtml(P){
@@ -748,7 +745,7 @@ function editorHtml(b){
     <div class="field"><label for="e-cad">How often</label><select id="e-cad">${cads}</select></div>
     <div class="field"><label for="e-date">Next due</label><input id="e-date" type="date" value="${esc(date)}"></div>
     <div class="field"><label for="e-cat">Category</label><select id="e-cat">${opts}</select></div>
-    <div class="field wide"><label for="e-own">Who pays</label><select id="e-own"><option value="shared" ${!b||!S.people.some(x=>x.id===b.owner)?'selected':''}>Shared (split)</option>${S.people.map(x=>`<option value="${esc(x.id)}" ${b&&b.owner===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select></div>
+    <div class="field wide"><label for="e-own">Who pays</label><select id="e-own">${b&&S.people.some(x=>x.id===b.owner)?'':'<option value="" selected>Choose who pays</option>'}${S.people.map(x=>`<option value="${esc(x.id)}" ${b&&b.owner===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select></div>
     <div class="field wide" id="e-newwrap" hidden><label for="e-newcat">New category name</label><input id="e-newcat" type="text" maxlength="40" placeholder="Sam's bills"></div>
   </div>
   <label class="check"><input type="checkbox" id="e-inc" ${!b||b.include?'checked':''}> Count this bill in the plan</label>${src}
@@ -761,11 +758,11 @@ function viewBills(){
   if(catFilter!=='all'&&!S.categories.some(c=>c.id===catFilter))catFilter='all';
   const chips=`<div class="chips" role="group" aria-label="Filter by category"><button class="chip" data-act="filter" data-cat="all" aria-pressed="${catFilter==='all'}">All <span>${S.bills.length}</span></button>`
     +S.categories.map(c=>`<button class="chip" data-act="filter" data-cat="${esc(c.id)}" aria-pressed="${catFilter===c.id}"><i class="dot" style="${cc(c.id)}"></i>${esc(c.name)} <span>${counts.get(c.id)||0}</span></button>`).join('')+'</div>';
-  if(ownFilter!=='all'&&ownFilter!=='shared'&&!S.people.some(x=>x.id===ownFilter))ownFilter='all';
-  const ownKey=b=>S.people.some(x=>x.id===b.owner)?b.owner:'shared';
+  if(ownFilter!=='all'&&ownFilter!=='none'&&!S.people.some(x=>x.id===ownFilter))ownFilter='all';
+  const ownKey=b=>S.people.some(x=>x.id===b.owner)?b.owner:'none';
   const ocount=new Map();S.bills.forEach(b=>{const k=ownKey(b);ocount.set(k,(ocount.get(k)||0)+1);});
   const ochips=`<div class="chips" role="group" aria-label="Filter by who pays"><button class="chip" data-act="ofilter" data-own="all" aria-pressed="${ownFilter==='all'}">Everyone</button>`
-    +[{id:'shared',name:'Shared'}].concat(S.people).map(x=>`<button class="chip" data-act="ofilter" data-own="${esc(x.id)}" aria-pressed="${ownFilter===x.id}">${esc(x.name)} <span>${ocount.get(x.id)||0}</span></button>`).join('')+'</div>';
+    +S.people.concat(ocount.get('none')?[{id:'none',name:'No owner'}]:[]).map(x=>`<button class="chip" data-act="ofilter" data-own="${esc(x.id)}" aria-pressed="${ownFilter===x.id}">${esc(x.name)} <span>${ocount.get(x.id)||0}</span></button>`).join('')+'</div>';
   const rows=S.bills.filter(b=>(catFilter==='all'||catOf(b.category).id===catFilter)&&(ownFilter==='all'||ownKey(b)===ownFilter))
     .map(b=>({b,nd:nextDue(b,t)})).sort((x,y)=>(x.b.include===y.b.include?0:x.b.include?-1:1)||((x.nd==null?1e9:x.nd)-(y.nd==null?1e9:y.nd)));
   const dupCount=new Set([...dups.values()].map(v=>v.key)).size;
@@ -773,12 +770,13 @@ function viewBills(){
     const dp=dups.get(b.id);const open=editing===b.id;
     let pills='';
     if(!b.include)pills+=' <span class="pill off">Off</span>';
+    if(!S.people.some(x=>x.id===b.owner))pills+=' <span class="pill warn">No owner</span>';
     if(dp)pills+=' <span class="pill warn">Double-up?</span>';
     if(b.irregular)pills+=' <span class="pill warn">Irregular</span>';
     else if(b.variable)pills+=' <span class="pill acc">Varies</span>';
     return `<li class="${b.include?'':'off'} ${open?'open':''}"><button class="brow" data-act="edit" data-id="${esc(b.id)}" aria-expanded="${open}">
       <span class="dot" style="${cc(b.category)}"></span>
-      <span><span class="bn">${esc(b.name)}</span><span class="bs">${esc(ownerName(b.owner))} · ${esc(catOf(b.category).name)} · ${esc(cadLabel(b))}${nd!=null?' · next '+esc(fmtDay(nd)):''}${pills}</span></span>
+      <span><span class="bn">${esc(b.name)}</span><span class="bs">${S.people.some(x=>x.id===b.owner)?esc(ownerName(b.owner))+' · ':''}${esc(catOf(b.category).name)} · ${esc(cadLabel(b))}${nd!=null?' · next '+esc(fmtDay(nd)):''}${pills}</span></span>
       <span class="bamt">${f2(b.amount)}</span><span class="chev"></span></button>
       ${dp?`<div class="dup"><p>Looks like a double-up of <strong>${esc(dp.other.name)}</strong>: ${esc(dp.why)}.</p><div class="btnrow"><button class="btn small ghost" data-act="dupKeep" data-key="${esc(dp.key)}">Not a double-up</button><button class="btn small danger" data-act="delBill" data-id="${esc(b.id)}">${confirmDel===b.id?'Tap again to remove':'Remove this one'}</button></div></div>`:''}
       ${open?editorHtml(b):''}</li>`;
@@ -793,7 +791,7 @@ function viewBills(){
       ${editing==='new'?`<div class="hd" style="padding-top:0"><h2>New bill</h2></div>${editorHtml(null)}`:''}
       <ul class="blist">${list}</ul>
       ${editing==='new'?'':`<div style="padding:0 16px 16px"><button class="btn" data-act="new">Add a bill</button></div>`}${msgHtml('bills')}</section>
-    <section class="card"><h2>Categories</h2><p>Group bills however suits the shared account, for example by type or by who pays. Tap a colour to change it.</p>
+    <section class="card"><h2>Categories</h2><p>Group bills by type, for example housing or utilities. Tap a colour to change it.</p>
       <ul class="cats">${cats}</ul>
       <div class="addcat"><input id="newCat" type="text" maxlength="40" placeholder="New category" aria-label="New category name"><button class="btn small" data-act="catAdd">Add</button></div></section>`;
 }
@@ -865,17 +863,15 @@ function formError(text){
   m.className='msg bad';m.textContent=text;
 }
 function savePerson(){
-  const name=$('#p-name').value.trim().slice(0,30),pay=$('#p-pay').value,freq=$('#p-freq').value,share=parseFloat($('#p-share').value),pin=$('#p-in').value.trim();
+  const name=$('#p-name').value.trim().slice(0,30),pay=$('#p-pay').value,freq=$('#p-freq').value,pin=$('#p-in').value.trim();
   if(!name){formError('Enter a name.');return;}
   if(parseISO(pay)==null){formError('Enter their next payday.');return;}
-  if(!(share>=0)){formError('Enter a share of 0 to 100.');return;}
   if(pin!==''&&!(+pin>=0)){formError('The amount must be a number, or leave it empty.');return;}
-  const fields={name,nextPayday:pay,freq:FREQ[freq]?freq:'fortnightly',share,payIn:pin===''?'':+pin};
+  const fields={name,nextPayday:pay,freq:FREQ[freq]?freq:'fortnightly',payIn:pin===''?'':+pin};
   if(editingP==='new'){
     const n=S.people.length,even=Math.round(100/(n+1));
     const id='p'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
     S.people.push(Object.assign({id},fields));
-    if(Math.round(share)===even){const m=S.people.length,base=Math.floor(100/m);S.people.forEach((x,i)=>{x.share=base+(i<100-base*m?1:0);});}
   } else {const x=S.people.find(q=>q.id===editingP);if(x)Object.assign(x,fields);}
   editingP=null;msg=null;persist();render();
 }
@@ -885,7 +881,8 @@ function saveBill(){
   if(!name||!(amt>=0)||parseISO(date)==null){formError('Enter a name, an amount and the next due date.');return;}
   if(cat==='__new'){cat=newCategory($('#e-newcat').value);if(!cat){formError('Type a name for the new category.');return;}}
   const owner=$('#e-own').value;
-  const fields={owner:S.people.some(x=>x.id===owner)?owner:'shared',name,amount:Math.round(amt*100)/100,cadence:cad,anchor:date,dom:ymd(parseISO(date))[2],category:cat,include:inc,locked:true};
+  if(!S.people.some(x=>x.id===owner)){formError('Choose who pays this bill.');return;}
+  const fields={owner,name,amount:Math.round(amt*100)/100,cadence:cad,anchor:date,dom:ymd(parseISO(date))[2],category:cat,include:inc,locked:true};
   if(editing==='new'){
     if(S.example)clearExampleData();
     S.bills.push(Object.assign({id:'m:'+Date.now().toString(36),src:'manual'},fields));
@@ -949,6 +946,7 @@ document.addEventListener('click',async e=>{
   else if(a==='delBill'){const id=el.dataset.id;if(confirmDel===id)deleteBill(id);else{confirmDel=id;render();}}
   else if(a==='dupKeep'){if(!S.notDup.includes(el.dataset.key))S.notDup.push(el.dataset.key);persist();render();}
   else if(a==='filter'){catFilter=el.dataset.cat;editing=null;render();}
+  else if(a==='showUnassigned'){tab='bills';ownFilter='none';catFilter='all';editing=null;msg=null;render();}
   else if(a==='ofilter'){ownFilter=el.dataset.own;editing=null;render();}
   else if(a==='pedit'){const id=el.dataset.id;editingP=editingP===id?null:id;msg=null;render();}
   else if(a==='pnew'){editingP='new';msg=null;render();const n=$('#p-name');if(n)n.focus();}
@@ -957,9 +955,8 @@ document.addEventListener('click',async e=>{
   else if(a==='pdel'){
     const id=el.dataset.id;
     if(confirmPerson!==id){confirmPerson=id;render();return;}
-    S.bills.forEach(b=>{if(b.owner===id)b.owner='shared';});
+    S.bills.forEach(b=>{if(b.owner===id)b.owner='';});
     S.people=S.people.filter(x=>x.id!==id);confirmPerson=null;editingP=null;
-    {const tot=S.people.reduce((n,x)=>n+(+x.share||0),0);let left=100;S.people.forEach((x,i)=>{const v=i===S.people.length-1?left:Math.round(tot>0?(+x.share||0)/tot*100:100/S.people.length);x.share=v;left-=v;});}
     if(ownFilter===id)ownFilter='all';persist();render();
   }
   else if(a==='catColor'){const c=S.categories.find(x=>x.id===el.dataset.id);if(c){c.color=(c.color+1)%8;persist();render();}}
