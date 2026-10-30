@@ -57,7 +57,7 @@ mimetypes.add_type("text/javascript", ".js")
 
 
 def env_pass():
-    """A passcode set in TrueNAS (BB_PASSCODE). It takes priority over one set in the app."""
+    """A passcode set in the container (BB_PASSCODE). It takes priority over one set in the app."""
     return PASSCODE not in ("", PLACEHOLDER)
 
 
@@ -212,7 +212,9 @@ class Handler(BaseHTTPRequestHandler):
         return None
 
     def log_message(self, fmt, *args):
-        # Keep logs free of tokens and data: method, path and status only.
+        # Keep logs free of tokens and data: method, path and status only. Health checks are skipped.
+        if self.path.startswith("/api/status"):
+            return
         sys.stderr.write("%s %s\n" % (self.log_date_time_string(), fmt % args))
 
     # ---------- routing ----------

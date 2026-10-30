@@ -1410,10 +1410,10 @@ function signinHtml(){
 }
 function nopassHtml(){
   return `<section class="card"><h2>Passcode too short</h2><p>The server has a passcode set, but it's shorter than 8 characters, so sign-in is switched off.</p>
-    <ol class="steps"><li>In TrueNAS, open Apps, then bill-buffer, then Edit.</li><li>Make <code>BB_PASSCODE</code> at least 8 characters, or empty it to use the app without a passcode.</li><li>Save. The app restarts.</li></ol></section>`;
+    <ol class="steps"><li>Open the container settings on your server.</li><li>Make <code>BB_PASSCODE</code> at least 8 characters, or empty it and set a passcode in the app instead.</li><li>Restart the container.</li></ol></section>`;
 }
 function downHtml(){
-  return `<section class="card"><h2>Can't reach your server</h2><p>Bill Buffer works straight from your server, so it needs a connection to show or change the bills. Check this device is on your home network (or Tailscale) and that the app is running in TrueNAS.</p>
+  return `<section class="card"><h2>Can't reach your server</h2><p>Bill Buffer works straight from your server, so it needs a connection to show or change the bills. Check this device is on your home network (or Tailscale) and that the Bill Buffer container is running.</p>
     <div class="btnrow"><button class="btn" data-act="retry">Try again</button></div><p class="note">It also retries by itself every 15 seconds.</p></section>`;
 }
 function noticeHtml(){
@@ -1430,7 +1430,7 @@ function passcodeHtml(){
     <p>It's off, so anyone on your home network who opens the app's address can see and change the bills. With a passcode, every device has to sign in once. This device stays signed in.</p>
     <form id="pcOn" autocomplete="off"><div class="fields">${newPw}</div><div class="btnrow"><button class="btn" type="submit">Turn on passcode</button></div></form>${msgHtml('passcode')}</section>`;
   const devices=`<section class="card"><h2>Signed-in devices</h2>
-    <p>${Sync.lock==='server'?'The passcode is on. It is set in TrueNAS (<code>BB_PASSCODE</code>), so change or remove it there: Apps, bill-buffer, Edit.':'The passcode is on. Each device signs in once with it.'}</p>
+    <p>${Sync.lock==='server'?'The passcode is on. It is set in the container (<code>BB_PASSCODE</code>), so change or remove it there.':'The passcode is on. Each device signs in once with it.'}</p>
     <ul class="files" id="devList"><li><span>Loading devices…</span><span></span></li></ul>
     <div class="btnrow"><button class="btn small ghost" data-act="signOut">Sign out this device</button>
     <button class="btn small danger" data-act="signOutAll">${Sync.confirmAll?'Tap again to sign out all':'Sign out every device'}</button></div>${msgHtml('passcode')}</section>`;
@@ -1464,7 +1464,7 @@ async function passcodeSubmit(id){
   if(r.status===401&&d.error==='wrong_passcode')return fail(`That passcode isn't right.${d.triesLeft>0?` ${plural(d.triesLeft,'try','tries')} left before a 15 minute lockout.`:''}`);
   if(r.status===429)return fail(`Too many wrong tries. Try again in ${plural(Math.max(1,Math.ceil((d.retryAfter||900)/60)),'minute')}.`);
   if(r.status===401)return signedOut();
-  if(r.status===409){Sync.open=false;Sync.lock='server';return fail('The passcode is set in TrueNAS, so change it there.');}
+  if(r.status===409){Sync.open=false;Sync.lock='server';return fail('The passcode is set in the container (BB_PASSCODE), so change it there.');}
   if(r.status===400&&d.error==='bad_length')return fail('Use at least 8 characters.');
   fail("The passcode couldn't be changed. Try again.");
 }

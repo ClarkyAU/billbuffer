@@ -1,0 +1,26 @@
+services:
+  bill-buffer:
+    image: ghcr.io/clarkyau/billbuffer:latest
+    container_name: bill-buffer
+    restart: unless-stopped
+    ports:
+      - "47219:8080"
+    volumes:
+      - bill-buffer-data:/data
+    # Optional. Leave empty and set a passcode in the app instead (Settings > Passcode).
+    environment:
+      BB_PASSCODE: ""
+    read_only: true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - FOWNER
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  bill-buffer-data:

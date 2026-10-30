@@ -4,13 +4,27 @@ Shows how much should be in your shared bills account right now, and how much ea
 
 Import 2 or 3 months of bank statements (CSV) and it finds your bills for you.
 
-## Install on TrueNAS
+## Run it
 
-1. Go to **Apps > Discover Apps > Custom App > Install via YAML**.
-2. Paste in [`truenas.yaml`](truenas.yaml) and save.
-3. Open `http://YOUR-TRUENAS-IP:47219`.
+With Docker Compose, using [`docker-compose.yml`](docker-compose.yml):
 
-**To update:** restart the app in TrueNAS. It pulls the latest version from here each time it starts.
+```sh
+docker compose up -d
+```
+
+Or with plain Docker:
+
+```sh
+docker run -d --name bill-buffer --restart unless-stopped \
+  -p 47219:8080 -v bill-buffer-data:/data \
+  ghcr.io/clarkyau/billbuffer:latest
+```
+
+Then open `http://YOUR-SERVER-IP:47219`.
+
+On a NAS or Portainer, paste `docker-compose.yml` in as a new stack or custom app.
+
+**To update:** `docker compose pull && docker compose up -d`
 
 ## Passcode
 
@@ -18,11 +32,11 @@ Off by default, so anyone on your home network can open it. To lock it, go to **
 
 ## Back it up
 
-Your bills are kept on the server. Deleting the app in TrueNAS can delete them too, so save a copy now and then from **Settings > Backup**.
+Your bills live in the `bill-buffer-data` volume. Deleting the volume deletes them, so save a copy now and then from **Settings > Backup**.
 
 ## Install on your phone
 
 Chrome only offers **Install app** on a secure (`https://`) address. Two ways to get it:
 
 - **Tailscale:** run `tailscale serve`, which gives you an `https://` address. It also works away from home.
-- **Chrome flag:** on the phone, open `chrome://flags` and turn on **Insecure origins treated as secure**. Add `http://YOUR-TRUENAS-IP:47219`, then restart Chrome.
+- **Chrome flag:** on the phone, open `chrome://flags` and turn on **Insecure origins treated as secure**. Add `http://YOUR-SERVER-IP:47219`, then restart Chrome.
