@@ -582,7 +582,10 @@ function computePlan(){
   });
   const missing=people.filter(r=>r.next==null).map(r=>r.p.name);
   const ev=[];
-  people.forEach(r=>r.dates.forEach(d=>ev.push({d,pay:true,amt:r.payIn,person:r.p})));
+  // A pay-in due today should already be in the account, so it's part of today's balance
+  // rather than money still on its way.
+  const todayPays=[];
+  people.forEach(r=>r.dates.forEach(d=>{const e={d,pay:true,amt:r.payIn,person:r.p,today:d===t};ev.push(e);if(e.today&&r.payIn>0)todayPays.push(e);}));
   act.forEach(bl=>occurrences(bl,t,end).forEach(d=>ev.push({d,bl,amt:bl.amount})));
   ev.sort((a,b)=>a.d-b.d||(a.pay&&!b.pay?-1:b.pay&&!a.pay?1:b.amt-a.amt));
   // "Right now" only has to carry the account until everyone's next pay has gone in:
@@ -590,20 +593,20 @@ function computePlan(){
   let until=t+14;
   people.forEach(r=>{if(!r.dates.length)return;const second=r.dates[1]!=null?r.dates[1]:r.dates[0]+(r.f.days||31);until=Math.max(until,second);});
   let net=0,need=buf;
-  ev.forEach(e=>{if(e.d>=until)return;net+=e.pay?e.amt:-e.amt;if(!e.pay)need=Math.max(need,buf-net);});
+  ev.forEach(e=>{if(e.d>=until||e.today)return;net+=e.pay?e.amt:-e.amt;if(!e.pay)need=Math.max(need,buf-net);});
   const required=need,bal=balanceVal(),start=bal!=null?bal:required;
   const days=new Map();let run=start;
-  ev.forEach(e=>{run+=e.pay?e.amt:-e.amt;let x=days.get(e.d);if(!x){x={bills:[],pays:[],bal:0};days.set(e.d,x);}(e.pay?x.pays:x.bills).push(e);x.bal=run;});
+  ev.forEach(e=>{if(!e.today)run+=e.pay?e.amt:-e.amt;let x=days.get(e.d);if(!x){x={bills:[],pays:[],bal:0};days.set(e.d,x);}(e.pay?x.pays:x.bills).push(e);x.bal=run;});
   const segs=[];run=start;let idx=0;
   for(let k=0;k<7;k++){
     const a=t+k*14,b=a+14,open=run;let low=k===0?open:Infinity,total=0,payIn=0;const items=[];
-    while(idx<ev.length&&ev[idx].d<b){const e=ev[idx++];run+=e.pay?e.amt:-e.amt;if(e.pay)payIn+=e.amt;else total+=e.amt;items.push(e);if(!e.pay)low=Math.min(low,run);}
+    while(idx<ev.length&&ev[idx].d<b){const e=ev[idx++];if(e.today){items.push(e);continue;}run+=e.pay?e.amt:-e.amt;if(e.pay)payIn+=e.amt;else total+=e.amt;items.push(e);if(!e.pay)low=Math.min(low,run);}
     if(low===Infinity)low=Math.min(open,run);
     segs.push({start:a,end:b,items,total,payIn,nBills:items.filter(e=>!e.pay).length,open,close:run,low,isNow:k===0});
   }
   const avg=segs.reduce((n,g)=>n+g.total,0)/segs.length;
   segs.forEach(g=>{g.tight=g.total>=avg*1.2&&g.total-avg>=50;});
-  return {t,buf,until,required,bal,start,segs,days,catRows,perFn,people,missing,unassigned,nAct:act.length,end,nextPay:ev.find(e=>e.pay)||null};
+  return {t,buf,until,todayPays,required,bal,start,segs,days,catRows,perFn,people,missing,unassigned,nAct:act.length,end,nextPay:ev.find(e=>e.pay)||null};
 }
 
 /* ---------- example data shown on first open ---------- */
@@ -723,15 +726,17 @@ const exampleBanner=()=>S.example?`<section class="banner"><p><strong>Example da
 /* ---------- Now tab ---------- */
 function heroHtml(P){
   const sub=P.nAct
-    ?`Covers every bill due up to ${esc(fmtDay(P.until-1))}, by which time everyone has been paid twice, without dropping below your ${f0(P.buf)} buffer. Assumes everyone puts in their amount on payday.`
+    ?`What the balance should be today${P.todayPays.length?', after today\'s pay-ins':''}. It covers every bill due up to ${esc(fmtDay(P.until-1))} without dropping below your ${f0(P.buf)} buffer, counting the pay-ins due before then.`
     :`No bills are in the plan yet. Import 2 or 3 months of statements, or add bills on the Bills tab.`;
   let rows='';
   if(P.bal!=null){
     const diff=P.bal-P.required;
-    rows+=`<div class="hrow"><div class="l">In the account<small>${f2(P.bal)}</small></div><span class="hpill">${diff<-0.004?'Short '+up(-diff):down(diff)+' spare'}</span></div>`;
+    const waiting=P.todayPays.length&&diff<-0.004?` · ${esc(P.todayPays.map(e=>e.person.name).join(' and '))}'s pay-in due today may not be in yet`:'';
+    rows+=`<div class="hrow"><div class="l">In the account<small>${f2(P.bal)}${waiting}</small></div><span class="hpill">${diff<-0.004?'Short '+up(-diff):down(diff)+' spare'}</span></div>`;
   }
   P.people.forEach(r=>{
-    rows+=`<div class="hrow"><div class="l">${esc(r.p.name)}<small>Puts in ${esc(r.f.label.toLowerCase())}${r.next!=null?' · next '+esc(fmtDay(r.next)):' · no payday set'}</small></div><div class="v">${f0(r.payIn)}</div></div>`;
+    const isToday=r.next===P.t;
+    rows+=`<div class="hrow"><div class="l">${esc(r.p.name)}<small>Puts in ${esc(r.f.label.toLowerCase())}${isToday?' · <strong>payday today</strong>, counted in the figure above':r.next!=null?' · next '+esc(fmtDay(r.next)):' · no payday set'}</small></div><div class="v">${f0(r.payIn)}</div></div>`;
   });
   return `<section class="hero"><p class="eyebrow">Should be in the account now</p><p class="big">${up(P.required)}</p><p class="sub">${sub}</p><div class="rows">${rows}</div></section>`;
 }
@@ -789,7 +794,7 @@ function catHtml(P){
     <li class="tot"><span></span><span class="cn">Total</span><span></span><span class="cv">${f2(P.perFn)}</span></li></ul></section>`;
 }
 function segHtml(P){
-  const sub=P.bal!=null?'Projected from the balance you entered.':`Projected as if ${up(P.required)} is in the account now.`;
+  const sub=(P.bal!=null?'Starting from the balance you entered.':`Starting from ${up(P.required)} in the account today.`)+' "Lowest" is the lowest the balance gets during that fortnight.';
   const maxT=Math.max(1,...P.segs.map(g=>g.total));
   const rows=P.segs.map((g,i)=>{
     let pills='';
@@ -798,13 +803,13 @@ function segHtml(P){
     if(g.low<-0.004)pills+=' <span class="pill bad">Overdrawn</span>';
     else if(g.low<P.buf-0.004)pills+=' <span class="pill warn">Below buffer</span>';
     const items=(g.items.length?g.items.map(e=>e.pay
-        ?`<li class="pay"><span class="d">${esc(fmtDay(e.d))}</span><span class="n">${esc(e.person.name)} puts in</span><span class="a">+${f2(e.amt)}</span></li>`
+        ?`<li class="pay"><span class="d">${esc(fmtDay(e.d))}</span><span class="n">${esc(e.person.name)} puts in${e.today?'<small>Today, already counted in the starting balance</small>':''}</span><span class="a">+${f2(e.amt)}</span></li>`
         :`<li><span class="d">${esc(fmtDay(e.d))}</span><span class="n"><i class="dot" style="${cc(e.bl.category)}"></i>${esc(e.bl.name)}<small>${esc(ownerName(e.bl.owner))}</small></span><span class="a">${f2(e.amt)}</span></li>`).join('')
       :`<li><span class="d"></span><span class="n">Nothing due</span><span class="a"></span></li>`)
       +`<li class="tot"><span class="d"></span><span class="n">Balance at the end</span><span class="a">${f2(g.close)}</span></li>`;
     return `<details data-i="${i}" ${openSeg.has(i)?'open':''}><summary>
       <div class="crow"><div><div class="cdate">${esc(fmtShort(g.start))} – ${esc(fmtShort(g.end-1))}</div><div class="cmeta">${plural(g.nBills,'bill')} · ${f2(g.total)} out · ${f2(g.payIn)} in${pills}</div></div>
-      <div class="cnum ${g.low<-0.004?'bad':''}"><small>Lowest</small>${down(g.low)}</div><span class="chev"></span></div>
+      <div class="cnum ${g.low<-0.004?'bad':''}"><small>Lowest balance</small>${down(g.low)}</div><span class="chev"></span></div>
       <div class="track"><i style="width:${(g.total/maxT*100).toFixed(1)}%"></i></div>
     </summary><ul class="items">${items}</ul></details>`;
   }).join('');
@@ -859,7 +864,7 @@ function viewCalendar(){
   if(selDay!=null){
     const past=selDay<t,x=P&&!past?P.days.get(selDay):null,b=past?null:balanceOn(P,selDay);
     const list=[];
-    (x?x.pays:[]).forEach(e=>list.push(`<li class="pay"><span class="d">Pay-in</span><span class="n">${esc(e.person.name)} puts in</span><span class="a">+${f2(e.amt)}</span></li>`));
+    (x?x.pays:[]).forEach(e=>list.push(`<li class="pay"><span class="d">Pay-in</span><span class="n">${esc(e.person.name)} puts in${e.today?'<small>Counted in today\'s balance</small>':''}</span><span class="a">+${f2(e.amt)}</span></li>`));
     (x?x.bills:[]).forEach(e=>list.push(`<li><span class="d">${esc(catOf(e.bl.category).name)}</span><span class="n"><i class="dot" style="${cc(e.bl.category)}"></i>${esc(e.bl.name)}<small>${esc(ownerName(e.bl.owner))}</small></span><span class="a">${f2(e.amt)}</span></li>`));
     detail=`<section class="card flush"><div class="hd"><p class="eyebrow">${selDay===t?'Today':past?'Past day':'Selected day'}</p><h2>${esc(fmtFull(selDay))}</h2>
       ${past?'<p>Bills already paid are not shown.</p>':list.length?'':'<p>No bills due.</p>'}</div>
