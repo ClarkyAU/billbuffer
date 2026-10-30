@@ -71,6 +71,10 @@ button{font-family:inherit}
 .hrow .l small{display:block;opacity:.8;font-size:12px}
 .hrow .v{font:600 18px var(--f-num);font-variant-numeric:tabular-nums;white-space:nowrap}
 .hpill{font:600 11px var(--f-num);letter-spacing:.06em;text-transform:uppercase;background:var(--accent-ink);color:var(--accent);padding:4px 8px;border-radius:99px;white-space:nowrap}
+.hbtn{width:100%;background:none;border:0;border-bottom:1px solid color-mix(in srgb,var(--accent-ink) 22%,transparent);color:inherit;font:inherit;text-align:left;cursor:pointer;border-radius:0}
+.hbtn:last-child{border-bottom:0}
+.hbtn:hover .l{text-decoration:underline}
+.harrow{font:400 22px/1 var(--f-body);margin-left:8px;opacity:.8;vertical-align:-1px}
 .hpill.bad{background:var(--bad);color:var(--surface);font-size:12px;padding:5px 10px}
 
 .pill{display:inline-block;font:600 10.5px var(--f-num);letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:99px;vertical-align:1px;white-space:nowrap}
@@ -748,7 +752,7 @@ function heroHtml(P){
   }
   P.people.forEach(r=>{
     const isToday=r.next===P.t;
-    rows+=`<div class="hrow"><div class="l">${esc(r.p.name)}<small>Puts in ${esc(r.f.label.toLowerCase())}${isToday?' · <strong>payday today</strong>, counted in the figure above':r.next!=null?' · next '+esc(fmtDay(r.next)):' · no payday set'}</small></div><div class="v">${f0(r.payIn)}</div></div>`;
+    rows+=`<button class="hrow hbtn" data-act="ownerBills" data-id="${esc(r.p.id)}" aria-label="See ${esc(poss(r.p.name))} bills"><div class="l">${esc(r.p.name)}<small>Puts in ${esc(r.f.label.toLowerCase())}${isToday?' · <strong>payday today</strong>, counted in the figure above':r.next!=null?' · next '+esc(fmtDay(r.next)):' · no payday set'} · ${plural(r.nBills,'bill')}</small></div><div class="v">${f0(r.payIn)}<span class="harrow" aria-hidden="true">›</span></div></button>`;
   });
   return `<section class="hero"><p class="eyebrow">Should be in the account now</p><p class="big">${up(P.required)}</p><p class="sub">${sub}</p><div class="rows">${rows}</div></section>`;
 }
@@ -770,31 +774,6 @@ function personEditor(r){
   </div><p class="note">Leave "Puts in each payday" empty to use what their bills cost per pay.</p>
   <div class="btnrow"><button class="btn" data-act="psave">${x?'Save':'Add person'}</button><button class="btn ghost" data-act="pcancel">Cancel</button>
   ${x&&n>1?`<button class="btn danger" data-act="pdel" data-id="${esc(x.id)}">${confirmPerson===x.id?'Tap again to remove':'Remove'}</button>`:''}</div>${msgHtml('person')}</div>`;
-}
-function personHtml(P){
-  const t=P.t;
-  const billRow=b=>{const nd=nextDue(b,t);return `<li><button class="pbill" data-act="gotoBill" data-id="${esc(b.id)}">
-      <span class="dot" style="${cc(b.category)}"></span>
-      <span class="n">${esc(b.name)}<small>${esc(cadLabel(b))}${nd!=null?' · next '+esc(fmtDay(nd)):''}</small></span>
-      <span class="a">${f2(b.amount)}</span></button></li>`;};
-  const byDue=(a,b)=>((nextDue(a,t)??1e9)-(nextDue(b,t)??1e9));
-  const blocks=P.people.map(r=>{
-    const id=r.p.id;
-    const bills=S.bills.filter(b=>b.include&&b.owner===id).sort(byDue);
-    return `<details class="pblock" data-pid="${esc(id)}" ${openPeople.has(id)?'open':''}>
-      <summary class="ptop"><div><div class="pname">${esc(r.p.name)}</div>
-        <div class="bs">${esc(r.f.label)}${r.next!=null?' · next payday '+esc(fmtDay(r.next)):' <span class="pill warn">No payday</span>'} · ${plural(bills.length,'bill')}</div></div>
-        <div class="ppay"><small>Puts in</small>${f0(r.payIn)}</div><span class="chev"></span></summary>
-      ${bills.length?`<ul class="pbills">${bills.map(billRow).join('')}</ul>`:'<p class="note">No bills yet. Pick this person as "Who pays" on a bill.</p>'}
-      <div class="pfoot"><span>${f2(r.perPay)} per pay${r.custom?' · set amount':''}</span></div></details>`;
-  }).join('');
-  const none=S.bills.filter(b=>b.include&&!S.people.some(x=>x.id===b.owner)).sort(byDue);
-  const noneBlock=none.length?`<details class="pblock nobody" data-pid="__none" ${openPeople.has('__none')?'open':''}><summary class="ptop"><div><div class="pname">No owner yet</div><div class="bs">${plural(none.length,'bill')} nobody's pay-in covers</div></div><span></span><span class="chev"></span></summary>
-      <ul class="pbills">${none.map(billRow).join('')}</ul>
-      <div class="pfoot"><span></span><button class="btn small" data-act="showUnassigned">Assign owners</button></div></details>`:'';
-  return `<section class="card flush"><div class="hd"><h2>Who puts in what</h2><p>Each person pays all of the bills they own, spread across their own pay cycle. Tap someone to see their bills.</p></div>
-    ${blocks}${noneBlock}
-    <p class="note" style="padding:0 16px 16px;margin:0;border-top:1px solid var(--line);padding-top:12px">To add someone or change a payday, open <button class="linkbtn" data-act="openSettings">Settings</button>.</p></section>`;
 }
 function catHtml(P){
   if(!P.catRows.length)return '';
@@ -827,18 +806,17 @@ function segHtml(P){
 }
 function settingsHtml(){
   const s=S.settings;
-  return `<section class="card"><div class="balrow"><div class="field"><label for="s-bal">Balance now ($)</label><input id="s-bal" type="number" inputmode="decimal" step="0.01" data-s="balance" value="${esc(s.balance)}" placeholder="What's in the account"></div>
+  return `<section class="card"><div class="balrow"><div class="field"><label for="s-bal">Balance now ($)</label><input id="s-bal" type="number" inputmode="decimal" step="0.01" data-s="balance" value="${esc(s.balance)}" placeholder="Optional"></div>
     <p class="note">Enter what's in the account to see if it's short.</p></div></section>`;
 }
 function viewNow(){
   const P=computePlan();
-  return exampleBanner()+`<div id="heroBox">${heroHtml(P)}</div><div id="warnBox">${warnHtml(P)}</div>${settingsHtml()}<div id="personBox">${personHtml(P)}</div><div id="catBox">${catHtml(P)}</div><div id="segBox">${segHtml(P)}</div>`;
+  return exampleBanner()+`<div id="heroBox">${heroHtml(P)}</div><div id="warnBox">${warnHtml(P)}</div>${settingsHtml()}<div id="catBox">${catHtml(P)}</div><div id="segBox">${segHtml(P)}</div>`;
 }
 function refreshNow(){
   const P=computePlan();
   const set=(id,h)=>{const el=$(id);if(el)el.innerHTML=h;};
   set('#heroBox',heroHtml(P));set('#warnBox',warnHtml(P));set('#catBox',catHtml(P));set('#segBox',segHtml(P));
-  if(editingP==null)set('#personBox',personHtml(P));
 }
 
 /* ---------- Calendar tab ---------- */
@@ -1331,6 +1309,7 @@ document.addEventListener('click',async e=>{
   if(a!=='catDel')confirmCat=null;
   if(a!=='pdel')confirmPerson=null;
   if(a==='tab'){tab=el.dataset.tab;msg=null;pendingRestore=null;editing=null;editingP=null;render();window.scrollTo(0,0);}
+  else if(a==='ownerBills'){tab='bills';ownFilter=el.dataset.id;catFilter='all';editing=null;msg=null;render();window.scrollTo(0,0);}
   else if(a==='openSettings'){tab='settings';msg=null;editing=null;render();const s=$('#set-people');if(s)s.scrollIntoView({block:'start'});}
   else if(a==='clearExample'){clearExampleData();persist();render();}
   else if(a==='edit'){const id=el.dataset.id;editing=editing===id?null:id;msg=null;render();}
