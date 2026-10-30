@@ -373,8 +373,21 @@ function mergeTxns(newT){
 }
 
 /* ---------- finding recurring bills ---------- */
-const STOP=new Set('VISA PURCHASE DEBIT DIRECT EFTPOS CARD AUS AU PAYMENT BPAY TRANSFER ONLINE INTERNET FROM TO VALUE DATE PTY LTD THE PAY REF RECEIPT AUTH PENDING EFT POS AUSTRALIA NSW VIC QLD WA SA TAS ACT NT MELBOURNE SYDNEY'.split(' '));
-const SKIP=/\b(SALARY|WAGES|PAYROLL|INTEREST|REFUND)\b/;
+const STOP=new Set('VISA PURCHASE DEBIT DIRECT EFTPOS CARD AUS AU PAYMENT BPAY TRANSFER ONLINE INTERNET FROM TO VALUE DATE PTY LTD THE PAY REF RECEIPT AUTH PENDING EFT POS AUSTRALIA NSW VIC QLD WA SA TAS ACT NT MELBOURNE SYDNEY IN OSKO INTERNAL JAN FEB MAR APR MAY JUN JUL AUG SEP SEPT OCT NOV DEC MON TUE WED THU FRI SAT SUN'.split(' '));
+const SKIP=/\b(SALARY|WAGES|PAYROLL|INTEREST|REFUND)\b|ROUND UP/;
+/* The payee part of a bank description. Many banks write "Payee - Type - Receipt 123 ...",
+   so only the part before the first " - " is used. Transfers to the same account number
+   are grouped by that account, whatever the description says. */
+function payeeHead(s){s=String(s);return s.includes(' - ')?s.split(' - ')[0]:s;}
+function payeeKey(s){
+  const m=String(s).match(/\bto\s+(\d{6})\s+(\d{5,10})\b/i);
+  if(m)return 'ACCT '+m[1]+m[2];
+  return norm(payeeHead(s));
+}
+function cleanName(s){
+  const w=String(s).replace(/\.{2,}|…/g,' ').replace(/[^A-Za-z0-9&' ]+/g,' ').split(/\s+/).filter(x=>x&&!/\d/.test(x));
+  return w.slice(0,5).join(' ').toUpperCase();
+}
 function norm(s){
   const w=String(s).toUpperCase().replace(/[^A-Z0-9 ]+/g,' ').split(/\s+/).filter(x=>x.length>1&&!/\d/.test(x)&&!STOP.has(x));
   return w.slice(0,3).join(' ');
@@ -405,18 +418,21 @@ function clusterBy(arr,val,close){
   for(let i=1;i<s.length;i++){if(close(val(s[i-1]),val(s[i])))cur.push(s[i]);else{out.push(cur);cur=[s[i]];}}
   out.push(cur);return out.map(c=>c.sort((x,y)=>x.d-y.d));
 }
+let detectName='';
 function autoBill(key,suffix,label,arr,cad,extra){
   const f=seriesFields(arr,cad);
-  return Object.assign({id:'d:'+key+(suffix?'|'+suffix:''),grp:key,name:titleCase(key)+(label?' · '+label:''),src:'auto',include:suffix?true:!f.irregular},f,extra||{});
+  return Object.assign({id:'d:'+key+(suffix?'|'+suffix:''),grp:key,gname:detectName,name:detectName+(label?' · '+label:''),src:'auto',include:true},f,extra||{});
 }
 function detect(txns){
   const g={};
-  txns.forEach(t=>{const k=norm(t.t);if(k&&!SKIP.test(k))(g[k]=g[k]||[]).push(t);});
+  txns.forEach(t=>{const k=payeeKey(t.t);if(k&&!SKIP.test(k)&&!SKIP.test(norm(payeeHead(t.t))))(g[k]=g[k]||[]).push(t);});
   const out=[];
   for(const k in g){
+    const nc={};g[k].forEach(t=>{const n=cleanName(payeeHead(t.t));if(n)nc[n]=(nc[n]||0)+1;});
+    detectName=titleCase(Object.entries(nc).sort((a,b)=>b[1]-a[1])[0]?.[0]||k);
     const arr=g[k].slice().sort((a,b)=>a.d-b.d);if(arr.length<2)continue;
     const span=arr[arr.length-1].d-arr[0].d+1,months=new Set(arr.map(t=>monthKey(t.d))).size;
-    const perMonth=arr.length/Math.max(1,span/30.44);
+    const perMonth=(arr.length-1)/Math.max(1,(arr[arr.length-1].d-arr[0].d)/30.44);
     const amts=arr.map(t=>t.a),spread=(Math.max(...amts)-Math.min(...amts))/Math.max(...amts);
     const whole=mkSeries(arr);
     const gapsAll=[];for(let i=1;i<arr.length;i++)gapsAll.push(arr[i].d-arr[i-1].d);
@@ -427,6 +443,12 @@ function detect(txns){
     if(byDay.length>=2&&covDay>=.7){byDay.forEach(c=>{const dm=Math.round(median(c.map(t=>ymd(t.d)[2])));out.push(autoBill(k,'d'+dm,'around the '+ordn(dm),c,'monthly'));});continue;}
     // 1. one clean bill: same amount, regular timing
     if(whole&&whole.ok>=.8&&spread<=.03){out.push(autoBill(k,'','',arr,whole.cad));continue;}
+    // 1b. same amount, paid about once a week or fortnight even if the day moves around
+    if(spread<=.03&&arr.length>=4){
+      const span7=span/7,per=arr.length;
+      if(per/span7>=.8&&per/span7<=1.25){out.push(autoBill(k,'','',arr,'weekly'));continue;}
+      if(per/(span/14)>=.8&&per/(span/14)<=1.25){out.push(autoBill(k,'','',arr,'fortnightly'));continue;}
+    }
     // 2. several bills told apart by amount (e.g. $250 and $180 each month)
     const byAmt=clusterBy(arr,t=>t.a,(a,b)=>b-a<=Math.max(2,a*.08)).map(c=>({c,s:mkSeries(c)})).filter(x=>x.s&&x.s.ok>=.6);
     const covAmt=byAmt.reduce((n,x)=>n+x.c.length,0)/arr.length;
@@ -873,7 +895,7 @@ function viewBills(){
     const all=S.bills.filter(b=>grpOf(b)===blk.g&&b.include);
     const perMonth=all.reduce((n,b)=>n+annual(b)/12,0);
     const owners=[...new Set(all.map(b=>ownerName(b.owner)))];
-    return `<li class="grp"><div class="ghead"><span class="gname">${esc(titleCase(blk.g))}</span><span class="gmeta">${plural(grpSize.get(blk.g),'bill')} · about ${f2(perMonth)} a month · ${esc(owners.join(', ')||'No owner')}</span></div><ul class="blist sub">${blk.rows.map(rowHtml).join('')}</ul></li>`;
+    return `<li class="grp"><div class="ghead"><span class="gname">${esc((S.bills.find(b=>grpOf(b)===blk.g&&b.gname)||{}).gname||titleCase(blk.g))}</span><span class="gmeta">${plural(grpSize.get(blk.g),'bill')} · about ${f2(perMonth)} a month · ${esc(owners.join(', ')||'No owner')}</span></div><ul class="blist sub">${blk.rows.map(rowHtml).join('')}</ul></li>`;
   }).join(''):`<li class="empty">${S.bills.length?'No bills match these filters.':'No bills yet. Import statements or add one.'}</li>`;
   const cats=S.categories.map(c=>`<li style="${cc(c.id)}"><button class="swatch" data-act="catColor" data-id="${esc(c.id)}" aria-label="Change colour for ${esc(c.name)}"></button>
     <input type="text" id="cat-${esc(c.id)}" data-cat="${esc(c.id)}" maxlength="40" value="${esc(c.name)}" aria-label="Category name">
