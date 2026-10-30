@@ -401,6 +401,31 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-
 .tempbox{border-radius:14px;background:color-mix(in srgb,var(--surface-2) 60%,transparent)}
 .dup,.quickown{border-radius:12px}
 @media (prefers-reduced-motion:reduce){.tabbar .ti{transition:none}}
+/* columns: stacked on phones, side by side on wide screens */
+.cols,.setgrid,.narrow,.col{display:grid;gap:16px;min-width:0;align-content:start}
+#warnBox:empty,#catBox:empty{display:none}
+@media (min-width:900px){
+  body{padding-bottom:40px;padding-left:max(132px,env(safe-area-inset-left,0px));padding-right:max(32px,env(safe-area-inset-right,0px));padding-block:28px 40px}
+  .wrap{max-width:1180px;gap:20px}
+  .tabbar{left:0;right:auto;top:0;bottom:0;transform:none;width:100px;border-radius:0;border:0;border-right:1px solid var(--line);box-shadow:none;
+    grid-template-columns:1fr;grid-auto-rows:min-content;align-content:start;gap:6px;padding:92px 8px 20px}
+  .tabbar button{min-height:72px;border-radius:14px}
+  .tabbar button:hover{background:var(--surface-2)}
+  .top{padding-bottom:4px}
+  .brand{font-size:24px}
+  .cols.now{grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:20px;align-items:start}
+  .cols.now>.col:last-child{position:sticky;top:20px}
+  .cols.cal{grid-template-columns:minmax(0,1.7fr) minmax(300px,1fr);gap:20px;align-items:start}
+  .cols.cal .day{min-height:96px;padding:8px}
+  .cols.cal .dn{font-size:14px}
+  .cols.cal .damt{font-size:12.5px}
+  .cols.cal .dots i{width:9px;height:9px}
+  .setgrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;align-items:start}
+  .narrow{max-width:820px;width:100%;margin:0 auto}
+  .sethead{max-width:none}
+  .hero .big{font-size:72px}
+}
+@media (min-width:900px) and (hover:hover){.brow:hover,.pbill:hover,.day:hover,.cyc summary:hover{background:color-mix(in srgb,var(--surface-2) 70%,transparent)}}
 </style>
 </head>
 <body>
@@ -433,7 +458,7 @@ function guessCategory(n){
 }
 
 const DEFAULT_PEOPLE=()=>[{id:'p1',name:'You',nextPayday:'',freq:'fortnightly',payIn:''},{id:'p2',name:'Partner',nextPayday:'',freq:'fortnightly',payIn:''}];
-const FREQ={weekly:{label:'Every week',days:7,per:365.25/7},fortnightly:{label:'Every fortnight',days:14,per:365.25/14},'4weekly':{label:'Every 4 weeks',days:28,per:365.25/28},monthly:{label:'Every month',per:12}};
+const FREQ={weekly:{label:'Weekly',days:7,per:365.25/7},fortnightly:{label:'Fortnightly',days:14,per:365.25/14},'4weekly':{label:'Every 4 weeks',days:28,per:365.25/28},monthly:{label:'Monthly',per:12}};
 const freqFromDays=n=>+n===7?'weekly':+n===28?'4weekly':'fortnightly';
 let S=null;
 const defaults=()=>({v:2,example:false,settings:{nextPayday:'',payDays:14,buffer:200,balance:'',contribution:''},categories:DEFAULT_CATS(),people:DEFAULT_PEOPLE(),bills:[],hidden:[],notDup:[],txns:[],files:[],meta:{lastBackup:null,changed:null}});
@@ -929,26 +954,26 @@ const openSeg=new Set(),openPeople=new Set();let openWorking=false;
 const $=s=>document.querySelector(s);
 function setMsg(t,text,kind){msg={tab:t,text,kind};}
 function msgHtml(where){return msg&&msg.tab===where?`<div class="msg ${msg.kind||''}" role="status">${esc(msg.text)}</div>`:'';}
-const exampleBanner=()=>S.example?`<section class="banner"><p><strong>Example data.</strong> These bills and amounts are made up so you can see how it works. Importing your statements or adding a bill replaces them.</p><button class="btn small" data-act="clearExample">Clear examples</button></section>`:'';
+const exampleBanner=()=>S.example?`<section class="banner"><p><strong>These are example bills.</strong> Import a statement or add a bill to start with your own.</p><button class="btn small" data-act="clearExample">Clear examples</button></section>`:'';
 
 /* ---------- Now tab ---------- */
 function heroHtml(P){
   const sub=P.nAct
-    ?`What the balance should be today${P.todayPays.length?', after today\'s pay-ins':''}, to cover every bill in this pay run and the next (up to ${esc(fmtDay(P.until-1))}) without dropping below your ${f0(P.buf)} buffer. Everyone puts in their usual amount on payday.`
-    :`No bills are in the plan yet. Import 2 or 3 months of statements in Settings, or add bills on the Bills tab.`;
+    ?`Covers every bill until ${esc(fmtDay(P.until-1))} and keeps your ${f0(P.buf)} buffer${P.todayPays.length?', counting today\'s pay-ins as already in':''}. Assumes everyone pays in on payday.`
+    :`No bills yet. Import a statement in Settings, or add a bill on the Bills tab.`;
   let rows='',hint='';
   if(P.bal!=null){
     const diff=P.bal-P.required;
-    if(diff>=-0.004)hint=`${down(diff)} spare above the figure.`;
+    if(diff>=-0.004)hint=`${down(diff)} more than needed.`;
     else if(P.todayPays.length)hint=`${esc(P.todayPays.length===1?poss(P.todayPays[0].person.name):P.todayPays.map(e=>e.person.name).join(' and ')+"'s")} pay-in due today may not be in yet.`;
   }
   P.people.forEach(r=>{
     const isToday=r.next===P.t;
-    rows+=`<button class="hrow hbtn" data-act="ownerBills" data-id="${esc(r.p.id)}" aria-label="See ${esc(poss(r.p.name))} bills"><div class="l">${esc(r.p.name)}<small>Puts in ${esc(r.f.label.toLowerCase())}${isToday?' · <strong>payday today</strong>, counted in the figure above':r.next!=null?' · next '+esc(fmtDay(r.next)):' · no payday set'} · ${plural(r.nBills,'bill')}${r.nextChange?` · ${f0(r.nextChange.amt)} from ${esc(fmtShort(r.nextChange.d))}`:''}</small></div><div class="v">${f0(r.payIn)}<span class="harrow" aria-hidden="true">›</span></div></button>`;
+    rows+=`<button class="hrow hbtn" data-act="ownerBills" data-id="${esc(r.p.id)}" aria-label="See ${esc(poss(r.p.name))} bills"><div class="l">${esc(r.p.name)}<small>${esc(r.f.label)}${isToday?' · <strong>paid today</strong>':r.next!=null?' · next pay '+esc(fmtDay(r.next)):' · no payday set'} · ${plural(r.nBills,'bill')}${r.nextChange?` · ${f0(r.nextChange.amt)} from ${esc(fmtShort(r.nextChange.d))}`:''}</small></div><div class="v">${f0(r.payIn)}<span class="harrow" aria-hidden="true">›</span></div></button>`;
   });
   const nb=P.working.filter(w=>!w.e.pay),np=P.working.filter(w=>w.e.pay);
   const low=P.working.reduce((m,w)=>Math.min(m,w.bal),P.required);
-  const work=P.nAct?`<details class="working" ${openWorking?'open':''}><summary>Show the working</summary>
+  const work=P.nAct?`<details class="working" ${openWorking?'open':''}><summary>How this is worked out</summary>
     <p>${plural(nb.length,'bill')} (${f2(nb.reduce((n,w)=>n+w.e.amt,0))}) and ${plural(np.length,'pay-in')} (${f2(np.reduce((n,w)=>n+w.e.amt,0))}) up to ${esc(fmtDay(P.until-1))}. Starting from ${f2(P.required)}, the lowest the balance gets is ${f2(low)}.</p>
     <ul class="wlist"><li class="wstart"><span>${esc(fmtShort(P.t))}</span><span>Today${P.todayPays.length?'<small>after '+esc(P.todayPays.map(e=>e.person.name).join(' and '))+' pays in</small>':''}</span><span>${f2(P.required)}</span></li>
     ${P.working.map(w=>`<li class="${w.e.pay?'win':''} ${Math.abs(w.bal-low)<0.005?'wlow':''}"><span>${esc(fmtShort(w.e.d))}</span><span>${esc(w.e.pay?w.e.person.name+' pays in':w.e.bl.name)}<small>${w.e.pay?'+':'−'}${f2(w.e.amt)}</small></span><span>${f2(w.bal)}</span></li>`).join('')}</ul></details>`:'';
@@ -964,9 +989,9 @@ function heroHtml(P){
 }
 function warnHtml(P){
   const out=[];
-  if(P.missing.length)out.push(`Add a next payday for ${esc(P.missing.join(' and '))} in Settings. Until then their pay-ins aren't counted, which pushes the number above up.`);
-  if(P.unassigned.length)out.push(`${plural(P.unassigned.length,'bill')} ${P.unassigned.length===1?'has':'have'} no owner yet, so nobody's pay-in covers ${P.unassigned.length===1?'it':'them'} and the number above includes the full cost of anything due before then. <button class="btn small" data-act="showUnassigned">Assign owners</button>`);
-  P.people.filter(r=>r.custom&&r.payIn+0.5<r.perPay).forEach(r=>out.push(`${esc(r.p.name)}'s pay-in is ${f2(r.perPay-r.payIn)} less than their bills cost per pay, so the account will run down over time. Watch for "Below buffer" in the coming fortnights.`));
+  if(P.missing.length)out.push(`Set a next payday for ${esc(P.missing.join(' and '))} in Settings. Their pay-ins aren't counted until you do.`);
+  if(P.unassigned.length)out.push(`${plural(P.unassigned.length,'bill')} ${P.unassigned.length===1?'has':'have'} no owner, so no one's pay-in covers ${P.unassigned.length===1?'it':'them'}. <button class="btn small" data-act="showUnassigned">Assign owners</button>`);
+  P.people.filter(r=>r.custom&&r.payIn+0.5<r.perPay).forEach(r=>out.push(`${esc(poss(r.p.name))} set amount is ${f2(r.perPay-r.payIn)} a pay short of their bills, so the account will slowly run down.`));
   return out.length?`<section class="banner">${out.map(x=>`<p>${x}</p>`).join('')}</section>`:'';
 }
 function personEditor(r){
@@ -975,21 +1000,21 @@ function personEditor(r){
   return `<div class="editor"><div class="fields">
     <div class="field wide"><label for="p-name">Name</label><input id="p-name" type="text" maxlength="30" value="${esc(x?x.name:'')}" placeholder="Sam"></div>
     <div class="field"><label for="p-pay">Next payday</label><input id="p-pay" type="date" value="${esc(x?x.nextPayday:'')}"></div>
-    <div class="field"><label for="p-freq">Gets paid</label><select id="p-freq">${freqs}</select></div>
-    <div class="field wide"><label for="p-in">Puts in each payday ($)</label><input id="p-in" type="number" inputmode="decimal" min="0" step="1" value="${x?esc(x.payIn):''}" placeholder="${r?'Auto: '+esc(f0(r.sugg)):'Auto'}"></div>
-  </div><p class="note">Leave "Puts in each payday" empty to use what their bills cost per pay.</p>
+    <div class="field"><label for="p-freq">Paid</label><select id="p-freq">${freqs}</select></div>
+    <div class="field wide"><label for="p-in">Fixed pay-in ($, optional)</label><input id="p-in" type="number" inputmode="decimal" min="0" step="1" value="${x?esc(x.payIn):''}" placeholder="${r?'Auto: '+esc(f0(r.sugg)):'Auto'}"></div>
+  </div><p class="note">Leave the fixed pay-in empty to use what their bills cost each pay.</p>
   <div class="btnrow"><button class="btn" data-act="psave">${x?'Save':'Add person'}</button><button class="btn ghost" data-act="pcancel">Cancel</button>
   ${x&&n>1?`<button class="btn danger" data-act="pdel" data-id="${esc(x.id)}">${confirmPerson===x.id?'Tap again to remove':'Remove'}</button>`:''}</div>${msgHtml('person')}</div>`;
 }
 function catHtml(P){
   if(!P.catRows.length)return '';
   const mx=Math.max(...P.catRows.map(r=>r.v));
-  return `<section class="card"><h2>Each fortnight, by category</h2><p>What each group of bills costs per fortnight on average.</p><ul class="catlist">
+  return `<section class="card"><h2>Cost per fortnight</h2><p>Average across the year, by category.</p><ul class="catlist">
     ${P.catRows.map(r=>`<li style="${cc(r.c.id)}"><span class="dot"></span><span class="cn">${esc(r.c.name)}</span><span class="cbar"><i style="width:${(r.v/mx*100).toFixed(1)}%"></i></span><span class="cv">${f2(r.v)}</span></li>`).join('')}
     <li class="tot"><span></span><span class="cn">Total</span><span></span><span class="cv">${f2(P.perFn)}</span></li></ul></section>`;
 }
 function segHtml(P){
-  const sub=(P.bal!=null?'Starting from the balance you entered.':`Starting from ${up(P.required)} in the account today.`)+' "Lowest" is the lowest the balance gets during that fortnight.';
+  const sub=`Lowest balance is the lowest the account gets in each fortnight, starting from ${P.bal!=null?'your current balance':up(P.required)+' today'}.`;
   const maxT=Math.max(1,...P.segs.map(g=>g.total));
   const rows=P.segs.map((g,i)=>{
     let pills='';
@@ -998,26 +1023,26 @@ function segHtml(P){
     if(g.low<-0.004)pills+=' <span class="pill bad">Overdrawn</span>';
     else if(g.low<P.buf-0.004)pills+=' <span class="pill warn">Below buffer</span>';
     const items=(g.items.length?g.items.map(e=>e.pay
-        ?`<li class="pay"><span class="d">${esc(fmtDay(e.d))}</span><span class="n">${esc(e.person.name)} puts in${e.today?'<small>Today, already counted in the starting balance</small>':''}</span><span class="a">+${f2(e.amt)}</span></li>`
+        ?`<li class="pay"><span class="d">${esc(fmtDay(e.d))}</span><span class="n">${esc(e.person.name)} puts in${e.today?'<small>Paid today, already counted</small>':''}</span><span class="a">+${f2(e.amt)}</span></li>`
         :`<li><span class="d">${esc(fmtDay(e.d))}</span><span class="n"><i class="dot" style="${cc(e.bl.category)}"></i>${esc(e.bl.name)}<small>${esc(ownerName(e.bl.owner))}</small></span><span class="a">${f2(e.amt)}</span></li>`).join('')
       :`<li><span class="d"></span><span class="n">Nothing due</span><span class="a"></span></li>`)
-      +`<li class="tot"><span class="d"></span><span class="n">Balance at the end</span><span class="a">${f2(g.close)}</span></li>`;
+      +`<li class="tot"><span class="d"></span><span class="n">Closing balance</span><span class="a">${f2(g.close)}</span></li>`;
     return `<details data-i="${i}" ${openSeg.has(i)?'open':''}><summary>
-      <div class="crow"><div><div class="cdate">${esc(fmtShort(g.start))} – ${esc(fmtShort(g.end-1))}</div><div class="cmeta">${plural(g.nBills,'bill')} · ${f2(g.total)} out · ${f2(g.payIn)} in${pills}</div></div>
+      <div class="crow"><div><div class="cdate">${esc(fmtShort(g.start))} – ${esc(fmtShort(g.end-1))}</div><div class="cmeta">${f0(g.total)} out · ${f0(g.payIn)} in · ${plural(g.nBills,'bill')}${pills}</div></div>
       <div class="cnum ${g.low<-0.004?'bad':''}"><small>Lowest balance</small>${down(g.low)}</div><span class="chev"></span></div>
       <div class="track"><i style="width:${(g.total/maxT*100).toFixed(1)}%"></i></div>
     </summary><ul class="items">${items}</ul></details>`;
   }).join('');
-  return `<section class="card flush cyc"><div class="hd"><h2>Coming fortnights</h2><p>${sub} Tap one to see what goes in and out.</p></div>${rows}</section>`;
+  return `<section class="card flush cyc"><div class="hd"><h2>Coming fortnights</h2><p>${sub} Tap one to see every payment.</p></div>${rows}</section>`;
 }
 function settingsHtml(){
   const s=S.settings;
-  return `<section class="card"><div class="balrow"><div class="field"><label for="s-bal">Balance now ($)</label><input id="s-bal" type="number" inputmode="decimal" step="0.01" data-s="balance" value="${esc(s.balance)}" placeholder="Optional"></div>
-    <p class="note">Enter what's in the account to see if it's short.</p></div></section>`;
+  return `<section class="card"><div class="balrow"><div class="field"><label for="s-bal">Current balance ($)</label><input id="s-bal" type="number" inputmode="decimal" step="0.01" data-s="balance" value="${esc(s.balance)}" placeholder="Optional"></div>
+    <p class="note">Copy it from your banking app to check you're covered.</p></div></section>`;
 }
 function viewNow(){
   const P=computePlan();
-  return exampleBanner()+`<div id="heroBox">${heroHtml(P)}</div><div id="warnBox">${warnHtml(P)}</div>${settingsHtml()}<div id="catBox">${catHtml(P)}</div><div id="segBox">${segHtml(P)}</div>`;
+  return exampleBanner()+`<div class="cols now"><div class="col"><div id="heroBox">${heroHtml(P)}</div><div id="warnBox">${warnHtml(P)}</div>${settingsHtml()}<div id="catBox">${catHtml(P)}</div></div><div class="col"><div id="segBox">${segHtml(P)}</div></div></div>`;
 }
 function refreshNow(){
   const P=computePlan();
@@ -1050,7 +1075,7 @@ function viewCalendar(){
     cells+=`<button class="day ${cls}" data-act="day" data-d="${d}" aria-label="${esc(al)}" aria-pressed="${d===selDay}"><span class="dn">${dd}</span><span class="dots">${dots}</span>${tot?`<span class="damt">${fk(tot)}</span>`:''}</button>`;
   }
   const legend=S.categories.filter(c=>used.has(c.id)).map(c=>`<li><span class="dot" style="${cc(c.id)}"></span>${esc(c.name)}</li>`).join('')
-    +`<li><span class="pb"></span>Someone's payday</li><li><span class="lowk">12</span>Below buffer</li>`;
+    +`<li><span class="pb"></span>Payday</li><li><span class="lowk">12</span>Below buffer</li>`;
   // selected day
   let detail='';
   if(selDay!=null){
@@ -1059,13 +1084,13 @@ function viewCalendar(){
     (x?x.pays:[]).forEach(e=>list.push(`<li class="pay"><span class="d">Pay-in</span><span class="n">${esc(e.person.name)} puts in${e.today?'<small>Counted in today\'s balance</small>':''}</span><span class="a">+${f2(e.amt)}</span></li>`));
     (x?x.bills:[]).forEach(e=>list.push(`<li><span class="d">${esc(catOf(e.bl.category).name)}</span><span class="n"><i class="dot" style="${cc(e.bl.category)}"></i>${esc(e.bl.name)}<small>${esc(ownerName(e.bl.owner))}</small></span><span class="a">${f2(e.amt)}</span></li>`));
     detail=`<section class="card flush"><div class="hd"><p class="eyebrow">${selDay===t?'Today':past?'Past day':'Selected day'}</p><h2>${esc(fmtFull(selDay))}</h2>
-      ${past?'<p>Bills already paid are not shown.</p>':list.length?'':'<p>No bills due.</p>'}</div>
-      ${list.length?`<ul class="items">${list.join('')}${b!=null?`<li class="tot"><span class="d"></span><span class="n">Balance at the end of the day</span><span class="a">${f2(b)}</span></li>`:''}</ul>`:(b!=null?`<p class="note" style="padding:0 16px 16px;margin:0">Balance: ${f2(b)}</p>`:'')}</section>`;
+      ${past?'<p>Past days aren\'t shown.</p>':list.length?'':'<p>No bills due.</p>'}</div>
+      ${list.length?`<ul class="items">${list.join('')}${b!=null?`<li class="tot"><span class="d"></span><span class="n">Closing balance</span><span class="a">${f2(b)}</span></li>`:''}</ul>`:(b!=null?`<p class="note" style="padding:0 16px 16px;margin:0">Balance: ${f2(b)}</p>`:'')}</section>`;
   }
-  return exampleBanner()+`<section class="card"><div class="calhead"><button class="navb" data-act="calPrev" ${canPrev?'':'disabled'} aria-label="Previous month">‹</button>
+  return exampleBanner()+`<div class="cols cal"><section class="card"><div class="calhead"><button class="navb" data-act="calPrev" ${canPrev?'':'disabled'} aria-label="Previous month">‹</button>
     <div><h2>${esc(fmtMonth(calY,calM))}</h2><small>${monthTotal?f2(monthTotal)+' in bills':'No bills'}${cur===ty*12+tm?' from today':''}</small></div>
     <button class="navb" data-act="calNext" ${canNext?'':'disabled'} aria-label="Next month">›</button></div>
-    <div class="grid">${cells}</div><ul class="legend">${legend}</ul></section>${detail}`;
+    <div class="grid">${cells}</div><ul class="legend">${legend}</ul></section><div class="col">${detail}</div></div>`;
 }
 
 /* ---------- Bills tab ---------- */
@@ -1088,9 +1113,9 @@ function editorHtml(b){
   const cads=CADS.map(([v,l])=>`<option value="${v}" ${(b?b.cadence:'monthly')===v?'selected':''}>${l}</option>`).join('');
   const txs=b&&Array.isArray(b.txs)?b.txs.slice().sort((x,y)=>y.d-x.d):[];
   const src=txs.length?`<div class="txbox"><p class="flabel">Payments found in statements (${txs.length})</p>
-    ${b.total?`<p class="note" style="margin-top:4px">These don't follow one pattern, so the amount is the biggest month's total. Split them if some are separate bills.</p>`:b.variable?`<p class="note" style="margin-top:4px">From ${f2(b.min)} to ${f2(b.max)}. The amount uses the highest.</p>`:''}
+    ${b.total?`<p class="note" style="margin-top:4px">These don't follow one pattern, so the amount is the biggest month's total. Split off any that are separate bills.</p>`:b.variable?`<p class="note" style="margin-top:4px">From ${f2(b.min)} to ${f2(b.max)}. The amount uses the highest.</p>`:''}
     <ul class="txlist">${txs.map((x,i)=>`<li><label for="tx-${i}"><input type="checkbox" id="tx-${i}" data-tx="${x.d}|${x.a}"><span class="d">${esc(fmtDay(x.d))}</span><span class="a">${f2(x.a)}</span></label></li>`).join('')}</ul>
-    <p class="note">Tick payments that are really a different bill, then split them off.</p>
+    <p class="note">Tick any payments that belong to a different bill, then split them off.</p>
     <div class="btnrow"><button class="btn small ghost" data-act="splitTx">Split ticked into a new bill</button>${b.grp?`<button class="btn small ghost" data-act="recheck">${confirmRecheck===b.id?'Tap again to re-check':'Re-check this payee'}</button>`:''}</div></div>`
     :(b&&b.src==='auto'?`<p class="note">Found in your statements${b.seen?', '+plural(b.seen,'payment'):''}.</p>`:'');
   return `<div class="editor"><div class="fields">
@@ -1102,17 +1127,17 @@ function editorHtml(b){
     <div class="field wide"><label for="e-own">Who pays</label><select id="e-own">${b&&S.people.some(x=>x.id===b.owner)?'':'<option value="" selected>Choose who pays</option>'}${S.people.map(x=>`<option value="${esc(x.id)}" ${b&&b.owner===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select></div>
     <div class="field wide" id="e-newwrap" hidden><label for="e-newcat">New category name</label><input id="e-newcat" type="text" maxlength="40" placeholder="Sam's bills"></div>
   </div>
-  <label class="check"><input type="checkbox" id="e-inc" ${!b||b.include?'checked':''}> Count this bill in the plan</label>
+  <label class="check"><input type="checkbox" id="e-inc" ${!b||b.include?'checked':''}> Include in the plan</label>
   <div class="tempbox"><p class="flabel">Amount changes</p>
     <ul class="chlist" id="e-chlist">${changesListHtml()}</ul>
     <div class="fields">
       <div class="field"><label for="c-amt">New amount ($)</label><input id="c-amt" type="number" inputmode="decimal" min="0" step="0.01"></div>
       <div class="field"><label for="c-from">From</label><input id="c-from" type="date" value="${esc(toISO(today()))}"></div>
-      <div class="field wide"><label for="c-until">Until (leave empty if it's permanent)</label><input id="c-until" type="date"></div>
+      <div class="field wide"><label for="c-until">Until (optional)</label><input id="c-until" type="date"></div>
     </div>
     <div class="btnrow"><button class="btn small ghost" data-act="chAdd">Add change</button></div>
     <div id="e-chmsg"></div>
-    <p class="note">For a set period, add an end date and the usual amount comes back after it. For something like a rent increase, leave the end date empty. Changes are kept when you tap Save.</p>
+    <p class="note">Add an end date for a temporary change. Leave it empty for a permanent one, like a rent increase. Tap Save to keep changes.</p>
   </div>${src}
   <div class="btnrow"><button class="btn" data-act="saveBill">${b?'Save':'Add bill'}</button><button class="btn ghost" data-act="cancelEdit">Cancel</button>
   ${b?`<button class="btn danger" data-act="delBill" data-id="${esc(b.id)}">${confirmDel===b.id?'Tap again to delete':'Delete'}</button>`:''}</div>${msgHtml('editor')}</div>`;
@@ -1162,12 +1187,12 @@ function viewBills(){
     const owners=[...new Set(all.map(b=>ownerName(b.owner)))];
     return `<li class="grp"><div class="ghead"><span class="gname">${esc((S.bills.find(b=>grpOf(b)===blk.g&&b.gname)||{}).gname||titleCase(blk.g))}</span><span class="gmeta">${plural(grpSize.get(blk.g),'bill')} · about ${f2(perMonth)} a month · ${esc(owners.join(', ')||'No owner')}</span></div><ul class="blist sub">${blk.rows.map(rowHtml).join('')}</ul></li>`;
   }).join(''):`<li class="empty">${S.bills.length?'No bills match these filters.':'No bills yet. Import statements in Settings, or add one.'}</li>`;
-    return exampleBanner()
-    +(dupCount?`<section class="banner"><p><strong>${plural(dupCount,'possible double-up')}.</strong> Some bills look like the same thing counted twice, which inflates your numbers. They're marked below.</p></section>`:'')
-    +`${ochips}${chips}<section class="card flush"><div class="hd"><h2>Bills</h2><p>Tap a bill to change its name, amount, timing or category.</p></div>
+    return `<div class="narrow">`+exampleBanner()
+    +(dupCount?`<section class="banner"><p><strong>${plural(dupCount,'possible double-up')}.</strong> These may be the same bill counted twice. Check the ones marked below.</p></section>`:'')
+    +`${ochips}${chips}<section class="card flush"><div class="hd"><h2>Bills</h2><p>Tap a bill to edit it.</p></div>
       ${editing==='new'?`<div class="hd" style="padding-top:0"><h2>New bill</h2></div>${editorHtml(null)}`:''}
       <ul class="blist">${list}</ul>
-      ${editing==='new'?'':`<div style="padding:0 16px 16px"><button class="btn" data-act="new">Add a bill</button></div>`}${msgHtml('bills')}</section>`;
+      ${editing==='new'?'':`<div style="padding:0 16px 16px"><button class="btn" data-act="new">Add a bill</button></div>`}${msgHtml('bills')}</section></div>`;
 }
 function categoriesHtml(){
   const counts=new Map();S.bills.forEach(b=>{const c=catOf(b.category).id;counts.set(c,(counts.get(c)||0)+1);});
@@ -1175,7 +1200,7 @@ function categoriesHtml(){
     <input type="text" id="cat-${esc(c.id)}" data-cat="${esc(c.id)}" maxlength="40" value="${esc(c.name)}" aria-label="Category name">
     <span class="ccount">${plural(counts.get(c.id)||0,'bill')}</span>
     ${c.id==='other'?'<span></span>':`<button class="x ${confirmCat===c.id?'confirm':''}" data-act="catDel" data-id="${esc(c.id)}" aria-label="Delete ${esc(c.name)}">${confirmCat===c.id?'Sure?':'×'}</button>`}</li>`).join('');
-  return `<section class="card" id="set-categories"><h2>Categories</h2><p>Group bills by type, for example housing or utilities. Tap a colour to change it.</p>
+  return `<section class="card" id="set-categories"><h2>Categories</h2><p>Group bills by type. Tap a colour to change it.</p>
       <ul class="cats">${cats}</ul>
       <div class="addcat"><input id="newCat" type="text" maxlength="40" placeholder="New category" aria-label="New category name"><button class="btn small" data-act="catAdd">Add</button></div></section>`;
 }
@@ -1184,21 +1209,21 @@ function peopleSettingsHtml(){
   const rows=P.people.map(r=>{const id=r.p.id,open=editingP===id;
     return `<li class="${open?'open':''}"><button class="brow" data-act="pedit" data-id="${esc(id)}" aria-expanded="${open}">
       <span class="dot" style="--cc:var(--accent)"></span>
-      <span><span class="bn">${esc(r.p.name)}</span><span class="bs">${esc(r.f.label)}${r.next!=null?' · next payday '+esc(fmtDay(r.next)):''}${r.next==null?' <span class="pill warn">No payday</span>':''}${r.custom?' · set amount':''}</span></span>
+      <span><span class="bn">${esc(r.p.name)}</span><span class="bs">${esc(r.f.label)}${r.next!=null?' · next pay '+esc(fmtDay(r.next)):''}${r.next==null?' <span class="pill warn">No payday</span>':''}${r.custom?' · set amount':''}</span></span>
       <span class="bamt">${f0(r.payIn)}</span><span class="chev"></span></button>${open?personEditor(r):''}</li>`;}).join('');
-  return `<section class="card flush" id="set-people"><div class="hd"><h2>People</h2><p>Who puts money into the account, when they're paid, and how much goes in each payday.</p></div>
+  return `<section class="card flush" id="set-people"><div class="hd"><h2>People</h2><p>Who pays into the account, and when.</p></div>
     <ul class="blist">${rows}</ul>
     ${editingP==='new'?`<div class="hd" style="padding-top:8px"><h2>New person</h2></div>${personEditor(null)}`:`<div style="padding:12px 16px 16px"><button class="btn" data-act="pnew">Add a person</button></div>`}</section>`;
 }
 function viewSettings(){
   const s=S.settings;
   return `<div class="sethead"><h2>Settings</h2><button class="btn small ghost" data-act="tab" data-tab="now">Done</button></div>
-    ${exampleBanner()}${peopleSettingsHtml()}
+    ${exampleBanner()}<div class="setgrid"><div class="col">${peopleSettingsHtml()}
     <section class="card"><h2>The account</h2><div class="fields"><div class="field"><label for="s-buf">Safety buffer ($)</label><input id="s-buf" type="number" inputmode="decimal" min="0" step="10" data-s="buffer" value="${esc(s.buffer)}"></div></div>
       <p class="note">The least you want left in the account at any time.</p></section>
-    ${categoriesHtml()}
-    <h3 class="sechd">Statements</h3>${viewImport(true)}
-    <h3 class="sechd">Sharing, backup and reset</h3>${viewBackup()}`;
+    ${categoriesHtml()}</div>
+    <div class="col"><h3 class="sechd">Statements</h3>${viewImport(true)}
+    <h3 class="sechd">Sharing, backup and reset</h3>${viewBackup()}</div></div>`;
 }
 
 /* ---------- Import and Backup tabs ---------- */
@@ -1207,13 +1232,13 @@ function viewImport(inSettings){
   const cov=!span?'':span>=60?`<span class="pill good">Good</span>`:span>=30?`<span class="pill warn">Add more</span>`:`<span class="pill bad">Too short</span>`;
   const covTxt=span?`${plural(span,'day')} covered, ${fmtLong(Math.min(...ds))} to ${fmtLong(Math.max(...ds))}`:'Nothing imported yet';
   const files=S.files.length?`<ul class="files">${S.files.map(f=>`<li><span>${esc(f.name)}</span><span>${esc(fmtShort(f.from))} – ${esc(fmtShort(f.to))} · ${f.added} new</span></li>`).join('')}</ul>`:'';
-  return `${inSettings?'':exampleBanner()}<section class="card"><h2>Add statements</h2><p>Use 2 or 3 months of CSV downloads from your bank. A bill needs to show up at least twice to be spotted. Bills you've edited or deleted stay that way when you import more.</p>
+  return `${inSettings?'':exampleBanner()}<section class="card"><h2>Add statements</h2><p>Import 2 to 3 months of CSV statements from your bank. A bill is found when a payment repeats. Your edits are kept when you import again.</p>
     <div class="btnrow"><label class="btn filebtn">Choose CSV files<input id="fileCsv" type="file" accept=".csv,.txt,text/csv,text/plain" multiple></label></div>
     <div class="field" style="margin-top:14px"><label for="pasteBox">Or paste rows</label><textarea id="pasteBox" placeholder="Date,Amount,Description&#10;03/09/2026,-1850.00,RENT PAYMENT"></textarea></div>
     <div class="btnrow"><button class="btn ghost" data-act="pasteImport">Add pasted rows</button></div>${msgHtml('import')}</section>
   <section class="card"><h2>What's loaded ${cov}</h2><p>${esc(covTxt)}${S.txns.length?`, ${S.txns.length} payments out`:''}.</p>${files}
     ${S.hidden.length&&S.txns.length?`<div class="btnrow"><button class="btn small ghost" data-act="unhide">Bring back ${plural(S.hidden.length,'deleted bill')}</button></div>`:''}</section>
-  <section class="card"><h2>Statement details</h2><p>Keep only your bills. This removes the imported payments and the payment list on each bill. Bills, amounts, dates, owners and changes all stay as they are.</p>
+  <section class="card"><h2>Statement details</h2><p>Delete the imported payments and keep just your bills. Amounts, dates, owners and changes stay.</p>
     <div class="btnrow"><button class="btn danger" data-act="stripNow" ${S.txns.length||S.bills.some(b=>(b.txs||[]).length)?'':'disabled'}>${confirmReset==='strip'?'Tap again to remove':'Remove statement details'}</button></div>
     <label class="check"><input type="checkbox" id="autoStrip" ${S.settings.autoStrip?'checked':''}> Remove them automatically after each import</label>
     <p class="note">Without the details, a bill can't be split by its payments or re-checked. Importing again brings them back${S.settings.autoStrip?' briefly, until they are removed again':''}.</p>${msgHtml('strip')}</section>`;
@@ -1233,11 +1258,11 @@ function viewBackup(){
 }
 function resetHtml(){
   const opts=[
-    ['statements','Clear statements','Removes imported statements and the bills found in them. Keeps people, categories, and bills you added or edited.','Clear statements'],
+    ['statements','Clear statements','Removes imported statements and the bills found in them. Keeps people, categories and bills you have edited.','Clear statements'],
     ['bills','Clear all bills','Removes every bill and statement. Keeps people, paydays and categories.','Clear bills'],
     ['all','Clear everything','Removes all bills, statements, people, categories and settings. The app starts empty.','Clear everything'],
-    ['example','Load the example','Replaces everything with the made-up example so you can see how it works.','Load example']];
-  return `<section class="card" id="reset"><h2>Reset</h2><p>Start again without reinstalling. This can't be undone, so back up first if you might want your data back.</p>
+    ['example','Load the example','Replaces everything with example bills to try the app.','Load example']];
+  return `<section class="card" id="reset"><h2>Reset</h2><p>These can't be undone. Back up first if you might want your data back.</p>
     <ul class="rlist">${opts.map(([k,t,d,b])=>`<li><div><strong>${t}</strong><p>${d}</p></div><button class="btn small danger" data-act="reset" data-kind="${k}">${confirmReset===k?'Tap again':b}</button></li>`).join('')}</ul>${msgHtml('reset')}</section>`;
 }
 
@@ -1377,9 +1402,9 @@ function noticeHtml(){
 function syncCardHtml(){
   if(Sync.mode!=='on')return '';
   const head=`<section class="card"><h2>Shared copy ${syncChip().replace('id="syncChip"','')}</h2>
-    <p>The bills live only on your server. Every device reads and saves that one copy, so everyone always sees the same version.${Sync.lastOk?' Last checked '+esc(ago(Sync.lastOk))+'.':''}</p>`;
+    <p>Your bills are kept on your server, and every device uses that one copy.${Sync.lastOk?' Last checked '+esc(ago(Sync.lastOk))+'.':''}</p>`;
   if(Sync.open)return head+`<div class="fields"><div class="field wide"><label for="dev-name">This device's name</label><input id="dev-name" type="text" maxlength="40" value="${esc(SY.device||guessDevice())}" placeholder="Rob's phone"></div></div>
-    <p class="note">Shown when this device saves a change. No passcode is set, so anyone on your home network can open the app.</p></section>`;
+    <p class="note">Shown when this device saves a change. There's no passcode, so anyone on your home network can open the app.</p></section>`;
   return head+`<ul class="files" id="devList"><li><span>Loading devices…</span><span></span></li></ul>
     <div class="btnrow"><button class="btn small ghost" data-act="signOut">Sign out this device</button>
     <button class="btn small danger" data-act="signOutAll">${Sync.confirmAll?'Tap again to sign out all':'Sign out every device'}</button></div></section>`;
@@ -1626,7 +1651,7 @@ document.addEventListener('click',async e=>{
     const keepMeta=S.meta;
     if(k==='statements'){S.txns=[];S.files=[];S.hidden=[];S.bills=S.bills.filter(b=>b.src!=='auto'||b.locked);S.example=false;setMsg('reset','Statements cleared. Your own and edited bills are still there.','good');}
     else if(k==='bills'){S.txns=[];S.files=[];S.hidden=[];S.notDup=[];S.bills=[];S.example=false;setMsg('reset','All bills cleared.','good');}
-    else if(k==='all'){S=defaults();S.meta=keepMeta;setMsg('reset','Everything cleared. Add your people and paydays on the Now tab to start.','good');}
+    else if(k==='all'){S=defaults();S.meta=keepMeta;setMsg('reset','Everything cleared. Add your people above to start.','good');}
     else if(k==='example'){S=buildExample();S.meta=keepMeta;setMsg('reset','Example loaded.','good');}
     persist();render();
   }
