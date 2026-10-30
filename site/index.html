@@ -148,7 +148,11 @@ input:focus,select:focus,textarea:focus{outline:none;box-shadow:3px 3px 0 var(--
 .money span{position:absolute;left:12px;top:50%;transform:translateY(-50%);font:800 17px var(--f-num);pointer-events:none}
 .hbal input{padding-left:28px;border-color:var(--on-tile);background:var(--paper);color:var(--on-tile);font:800 18px var(--f-num)}
 .hbal input:focus{box-shadow:3px 3px 0 var(--on-tile)}
-.hbal input::placeholder{color:#7A7468;font-weight:500}
+.hbal input::placeholder{color:#7A7468;font:500 16px var(--f-body)}
+.hbal input:placeholder-shown{padding-left:12px}
+.hbal input:placeholder-shown+span{display:none}
+.hbal input{appearance:textfield;-moz-appearance:textfield}
+.hbal input::-webkit-outer-spin-button,.hbal input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .working{margin-top:14px;padding-top:10px;border-top:2px solid var(--on-tile)}
 .working summary{font-weight:800;cursor:pointer;list-style:none}
 .working summary::-webkit-details-marker{display:none}
@@ -918,8 +922,8 @@ const exampleBanner=()=>S.example?`<section class="banner"><p><strong>These are 
 /* The figure. heroFig and the working are redrawn when numbers change; the balance box between
    them is left alone so typing in it is never interrupted. */
 function heroHtml(P){
-  return `<section class="hero"><div id="heroFig">${heroFig(P)}</div><div class="hbal"><label for="s-bal">Current balance</label><small>Copy it from your banking app.</small>
-    <div class="money"><span aria-hidden="true">$</span><input id="s-bal" type="number" inputmode="decimal" step="0.01" data-s="balance" value="${esc(S.settings.balance)}" placeholder="0.00"></div></div><div id="heroWork">${heroWork(P)}</div></section>`;
+  return `<section class="hero"><div id="heroFig">${heroFig(P)}</div><div class="hbal"><label for="s-bal">Current balance</label><small>Add it from your banking app to check you're covered.</small>
+    <div class="money"><input id="s-bal" type="number" inputmode="decimal" step="0.01" data-s="balance" value="${esc(S.settings.balance)}" placeholder="Optional"><span aria-hidden="true">$</span></div></div><div id="heroWork">${heroWork(P)}</div></section>`;
 }
 function heroWork(P){
   if(!P.nAct)return '';
