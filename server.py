@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Bill Buffer server: serves the app and keeps one shared copy of the household's data.
 
+Passcode is optional. With BB_PASSCODE empty, any device that can reach the server can use it
+(fine on a trusted home network). With BB_PASSCODE set (8+ characters), devices must sign in.
+
 Security:
-- Every data request needs a device token. A device gets one by signing in with the
+- With a passcode, every data request needs a device token. A device gets one by signing in with the
   household passcode (BB_PASSCODE). Only a SHA-256 hash of each token is stored.
 - Wrong passcodes are rate limited per address, with a lockout.
 - Saves are versioned. A save based on an old version is refused (409) instead of
@@ -47,8 +50,12 @@ mimetypes.add_type("application/manifest+json", ".webmanifest")
 mimetypes.add_type("text/javascript", ".js")
 
 
+def open_mode():
+    return PASSCODE in ("", PLACEHOLDER)
+
+
 def passcode_ready():
-    return len(PASSCODE) >= MIN_PASSCODE and PASSCODE != PLACEHOLDER
+    return open_mode() or len(PASSCODE) >= MIN_PASSCODE
 
 
 def now():
@@ -149,7 +156,12 @@ class Handler(BaseHTTPRequestHandler):
         host = self.headers.get("Host", "")
         return urlparse(origin).netloc == host
 
+    def device_name(self):
+        return "".join(c for c in (self.headers.get("X-BB-Device") or "")[:40] if c.isprintable()).strip()
+
     def auth(self):
+        if open_mode():
+            return "open", {"device": self.device_name() or "A device"}
         header = self.headers.get("Authorization", "")
         if not header.startswith("Bearer "):
             return None
@@ -193,6 +205,8 @@ class Handler(BaseHTTPRequestHandler):
         who = self.auth()
         if not who:
             return self.send_json(401, {"error": "signed_out"})
+        if open_mode() and path in ("/api/logout", "/api/logout-all"):
+            return self.send_json(200, {"ok": True})
         if path == "/api/logout":
             with lock:
                 toks = load_tokens()
@@ -244,7 +258,7 @@ class Handler(BaseHTTPRequestHandler):
     # ---------- api ----------
     def api_get(self, path):
         if path == "/api/status":
-            return self.send_json(200, {"app": "bill-buffer", "sync": True, "ready": passcode_ready()})
+            return self.send_json(200, {"app": "bill-buffer", "sync": True, "ready": passcode_ready(), "open": open_mode()})
         who = self.auth()
         if not who:
             return self.send_json(401, {"error": "signed_out"})
@@ -257,6 +271,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(200, {"version": cur.get("version", 0), "unchanged": True})
             return self.send_json(200, cur)
         if path == "/api/devices":
+            if open_mode():
+                return self.send_json(200, {"devices": []})
             with lock:
                 toks = load_tokens()
             devs = [{"device": t.get("device", ""), "created": t.get("created"), "lastSeen": t.get("lastSeen"), "you": h == who[0]} for h, t in toks.items()]
@@ -270,6 +286,8 @@ class Handler(BaseHTTPRequestHandler):
         with lock:
             if locked_until.get(ip, 0) > t:
                 return self.send_json(429, {"error": "locked", "retryAfter": locked_until[ip] - t})
+        if open_mode():
+            return self.send_json(400, {"error": "no_passcode_needed"})
         if not passcode_ready():
             return self.send_json(503, {"error": "no_passcode"})
         given = str(body.get("passcode", ""))
@@ -315,8 +333,10 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     prepare_data_dir()
-    if not passcode_ready():
-        print("WARNING: set BB_PASSCODE to at least %d characters in the app's YAML. Sign-in is disabled until then." % MIN_PASSCODE, flush=True)
+    if open_mode():
+        print("No passcode set: any device that can reach this server can view and change the bills.", flush=True)
+    elif not passcode_ready():
+        print("WARNING: BB_PASSCODE must be at least %d characters. Sign-in is disabled until then." % MIN_PASSCODE, flush=True)
     httpd = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
     httpd.daemon_threads = True
     print("Bill Buffer is running on port %d" % PORT, flush=True)

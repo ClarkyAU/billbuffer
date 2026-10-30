@@ -6,31 +6,32 @@ Works out how much should be in a shared bills account right now, and what each 
 - Edit every bill: name, amount, how often, next due date, category, who pays
 - Flags possible double-ups
 - Calendar of bills and pay-ins
-- Shared between your devices through your own server, and works offline
+- One shared copy on your own server that every device works from
 
 ## Run it on TrueNAS
 
-1. Open `truenas.yaml` and change `BB_PASSCODE` to your household passcode (8+ characters, no `$`).
-2. Paste it into **Apps > Discover Apps > Custom App > Install via YAML**.
-3. Open `http://YOUR-TRUENAS-IP:47219`, sign in with the passcode, and name the device.
+1. Paste `truenas.yaml` into **Apps > Discover Apps > Custom App > Install via YAML**.
+2. Open `http://YOUR-TRUENAS-IP:47219`.
+3. Optional: to require sign-in, set `BB_PASSCODE` in the YAML (8+ characters, no `$`).
 
 The container downloads the latest app from this repo each time it starts. To update, restart the app.
 
 ## Where the data lives
 
-One shared copy is kept in the `bill-buffer-data` Docker volume on the server (`/data/state.json`),
-with the last 30 versions in `/data/history`. Each device also keeps a copy so the app opens offline,
-and syncs when it can reach the server again.
+There is one copy, kept in the `bill-buffer-data` Docker volume on the server (`/data/state.json`),
+with the last 30 versions in `/data/history`. Devices don't keep their own copy: every device reads and
+saves that one version, so everyone always sees the same thing. If two people save at the same moment,
+the second save is refused and that person is shown the latest version to redo their change. The app needs
+to reach the server to show or change bills.
 
 Deleting the app in TrueNAS can delete the volume too. Keep a Drive backup from the Data tab.
 
 ## Security
 
-- **Passcode and device tokens.** Devices sign in once with the household passcode and get their own
-  token. The server stores only a SHA-256 hash of each token. You can sign out one device or every device
-  from the Data tab.
-- **Lockout.** Five wrong passcodes from one address lock sign-in for 15 minutes.
-- **No silent overwrites.** Saves are versioned; if two devices change things at once, the second is asked which copy to keep.
+- **Passcode is optional.** With `BB_PASSCODE` empty, anyone who can reach the server on your network can use it.
+  With a passcode, devices sign in once and get their own token (only a SHA-256 hash is stored), five wrong
+  tries lock sign-in for 15 minutes, and you can sign out one device or every device from the Data tab.
+- **No silent overwrites.** Saves are versioned; a save based on an older version is refused.
 - **Locked-down container.** The server drops root to an unprivileged user after preparing `/data`, all other
   Linux capabilities are dropped, and `no-new-privileges` is set. Data files are readable by that user only.
 - **Browser protections.** Strict Content-Security-Policy, no framing, no referrer, and writes are refused from other sites.

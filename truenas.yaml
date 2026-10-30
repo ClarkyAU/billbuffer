@@ -1,12 +1,11 @@
 # Bill Buffer for TrueNAS
 # Paste into Apps > Discover Apps > Custom App > Install via YAML (or Edit on the existing app).
 #
-# BEFORE YOU SAVE: change BB_PASSCODE below to your own household passcode.
-#   - at least 8 characters, longer is better (a short phrase works well)
-#   - don't use the $ sign, it has a special meaning in this file
+# No passcode by default: any device on your network that opens the address can use it.
+# To require sign-in, put a passcode in BB_PASSCODE (8+ characters, no $ sign) and save.
 #
-# Your bills are stored in the "bill-buffer-data" volume on this server and shared by every
-# signed-in device. The app itself is downloaded from GitHub each time the container starts.
+# Your bills are stored once, in the "bill-buffer-data" volume on this server, and every device
+# works from that one copy. The app itself is downloaded from GitHub each time the container starts.
 x-portals:
   - name: Web UI
     scheme: http
@@ -21,7 +20,7 @@ services:
     ports:
       - "47219:8080"
     environment:
-      BB_PASSCODE: "change-me-to-something-long"
+      BB_PASSCODE: ""
       PYTHONDONTWRITEBYTECODE: "1"
     volumes:
       - bill-buffer-data:/data
