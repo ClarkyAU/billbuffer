@@ -19,8 +19,7 @@ services:
       - /bin/sh
       - -c
       - |
-        URL=https://codeload.github.com/ClarkyAU/billbuffer/tar.gz/refs/heads/main
-        until (wget -qO /tmp/app.tgz "$URL" || curl -fsSL -o /tmp/app.tgz "$URL") && mkdir -p /tmp/bb && tar xzf /tmp/app.tgz -C /tmp/bb; do
+        until (wget -qO /tmp/app.tgz https://codeload.github.com/ClarkyAU/billbuffer/tar.gz/refs/heads/main || curl -fsSL -o /tmp/app.tgz https://codeload.github.com/ClarkyAU/billbuffer/tar.gz/refs/heads/main) && mkdir -p /tmp/bb && tar xzf /tmp/app.tgz -C /tmp/bb; do
           echo "Could not download Bill Buffer, retrying in 15s"; sleep 15
         done
         cp /tmp/bb/billbuffer-main/nginx.conf /etc/nginx/conf.d/default.conf
