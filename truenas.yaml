@@ -1,0 +1,28 @@
+# Bill Buffer for TrueNAS
+# Paste into Apps > Discover Apps > Custom App > Install via YAML.
+# On every start the container downloads the app from GitHub and serves it on port 47219.
+# Your bills and statements are never stored here; they live on your phone.
+x-portals:
+  - name: Web UI
+    scheme: http
+    host: 0.0.0.0
+    port: 47219
+    path: /
+services:
+  bill-buffer:
+    image: nginx:1.27-alpine
+    container_name: bill-buffer
+    restart: unless-stopped
+    ports:
+      - "47219:80"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        URL=https://codeload.github.com/ClarkyAU/billbuffer/tar.gz/refs/heads/main
+        until (wget -qO /tmp/app.tgz "$URL" || curl -fsSL -o /tmp/app.tgz "$URL") && mkdir -p /tmp/bb && tar xzf /tmp/app.tgz -C /tmp/bb; do
+          echo "Could not download Bill Buffer, retrying in 15s"; sleep 15
+        done
+        cp /tmp/bb/billbuffer-main/nginx.conf /etc/nginx/conf.d/default.conf
+        cp -r /tmp/bb/billbuffer-main/site/. /usr/share/nginx/html/
+        exec nginx -g 'daemon off;'
