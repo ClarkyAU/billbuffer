@@ -71,6 +71,21 @@ button{font-family:inherit}
 .hrow .l small{display:block;opacity:.8;font-size:12px}
 .hrow .v{font:600 18px var(--f-num);font-variant-numeric:tabular-nums;white-space:nowrap}
 .hpill{font:600 11px var(--f-num);letter-spacing:.06em;text-transform:uppercase;background:var(--accent-ink);color:var(--accent);padding:4px 8px;border-radius:99px;white-space:nowrap}
+.working{margin-top:14px;border-top:1px solid color-mix(in srgb,var(--accent-ink) 30%,transparent);padding-top:10px}
+.working summary{cursor:pointer;font-weight:600;list-style:none}
+.working summary::-webkit-details-marker{display:none}
+.working summary::after{content:" ›";opacity:.8}
+.working[open] summary::after{content:" ⌄"}
+.working p{margin:8px 0;font-size:13.5px;opacity:.92}
+.wlist{list-style:none;margin:0;padding:0;font-size:13px;max-height:340px;overflow-y:auto;border-radius:8px;background:color-mix(in srgb,var(--accent-ink) 10%,transparent)}
+.wlist li{display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:8px;align-items:start;padding:7px 10px;border-top:1px solid color-mix(in srgb,var(--accent-ink) 14%,transparent);font-variant-numeric:tabular-nums}
+.wlist li:first-child{border-top:0}
+.wlist li span:nth-child(2){min-width:0;overflow-wrap:anywhere}
+.wlist li small{display:block;font:500 12px var(--f-num);opacity:.85}
+.wlist li span:nth-child(3){font-family:var(--f-num);font-weight:600;text-align:right;white-space:nowrap}
+.wlist li.win{font-weight:600}
+.wlist li.wstart{font-weight:600}
+.wlist li.wlow{outline:2px solid var(--accent-ink);outline-offset:-2px;border-radius:6px}
 .hbtn{width:100%;background:none;border:0;border-bottom:1px solid color-mix(in srgb,var(--accent-ink) 22%,transparent);color:inherit;font:inherit;text-align:left;cursor:pointer;border-radius:0}
 .hbtn:last-child{border-bottom:0}
 .hbtn:hover .l{text-decoration:underline}
@@ -603,13 +618,23 @@ function computePlan(){
   people.forEach(r=>r.dates.forEach(d=>{const e={d,pay:true,amt:r.payIn,person:r.p,today:d===t};ev.push(e);if(e.today&&r.payIn>0)todayPays.push(e);}));
   act.forEach(bl=>occurrences(bl,t,end).forEach(d=>ev.push({d,bl,amt:bl.amount})));
   ev.sort((a,b)=>a.d-b.d||(a.pay&&!b.pay?-1:b.pay&&!a.pay?1:b.amt-a.amt));
-  // "Right now" only has to carry the account until everyone's next pay has gone in:
-  // look ahead to the end of each person's next full pay cycle, not a whole year.
+  // "Right now" covers this pay run and the next one, for everyone: every bill that lands
+  // before the end of each person's next pay run, counting the pay-ins that arrive before then.
+  // Pay-ins stay steady (each person's bills spread over their pay cycle), so weekly bills are
+  // always met by the regular pay-in and monthly ones are counted where they actually land.
   let until=t+14;
-  people.forEach(r=>{if(!r.dates.length)return;const second=r.dates[1]!=null?r.dates[1]:r.dates[0]+(r.f.days||31);until=Math.max(until,second);});
+  people.forEach(r=>{
+    if(!r.dates.length)return;
+    const cyc=r.f.days||31,ds=r.dates;
+    const k=ds[0]===t?2:1;  // paid today: this run started today, so look two paydays on
+    const end=ds[k]!=null?ds[k]:ds[ds.length-1]+cyc*(k-ds.length+1);
+    until=Math.max(until,end);
+  });
   let net=0,need=buf;
   ev.forEach(e=>{if(e.d>=until||e.today)return;net+=e.pay?e.amt:-e.amt;if(!e.pay)need=Math.max(need,buf-net);});
   const required=need,bal=balanceVal(),start=bal!=null?bal:required;
+  // the working behind the figure, step by step
+  const working=[];{let w=required;ev.forEach(e=>{if(e.d>=until||e.today)return;w+=e.pay?e.amt:-e.amt;working.push({e,bal:w});});}
   const days=new Map();let run=start;
   ev.forEach(e=>{if(!e.today)run+=e.pay?e.amt:-e.amt;let x=days.get(e.d);if(!x){x={bills:[],pays:[],bal:0};days.set(e.d,x);}(e.pay?x.pays:x.bills).push(e);x.bal=run;});
   const segs=[];run=start;let idx=0;
@@ -621,7 +646,7 @@ function computePlan(){
   }
   const avg=segs.reduce((n,g)=>n+g.total,0)/segs.length;
   segs.forEach(g=>{g.tight=g.total>=avg*1.2&&g.total-avg>=50;});
-  return {t,buf,until,todayPays,required,bal,start,segs,days,catRows,perFn,people,missing,unassigned,nAct:act.length,end,nextPay:ev.find(e=>e.pay)||null};
+  return {t,buf,until,todayPays,working,required,bal,start,segs,days,catRows,perFn,people,missing,unassigned,nAct:act.length,end,nextPay:ev.find(e=>e.pay)||null};
 }
 
 /* ---------- example data shown on first open ---------- */
@@ -733,7 +758,7 @@ const ownerName=id=>{const x=S.people.find(q=>q.id===id);return x?x.name:'No own
 let tab='now',msg=null,pendingRestore=null,confirmReset=null,dl=null,clearTimer=null;
 let confirmRecheck=null,editing=null,confirmDel=null,catFilter='all',confirmCat=null,ownFilter='all',confirmPerson=null,editingP=null;
 let calY=null,calM=null,selDay=null;
-const openSeg=new Set(),openPeople=new Set();
+const openSeg=new Set(),openPeople=new Set();let openWorking=false;
 const $=s=>document.querySelector(s);
 function setMsg(t,text,kind){msg={tab:t,text,kind};}
 function msgHtml(where){return msg&&msg.tab===where?`<div class="msg ${msg.kind||''}" role="status">${esc(msg.text)}</div>`:'';}
@@ -742,7 +767,7 @@ const exampleBanner=()=>S.example?`<section class="banner"><p><strong>Example da
 /* ---------- Now tab ---------- */
 function heroHtml(P){
   const sub=P.nAct
-    ?`What the balance should be today${P.todayPays.length?', after today\'s pay-ins':''}. It covers every bill due up to ${esc(fmtDay(P.until-1))} without dropping below your ${f0(P.buf)} buffer, counting the pay-ins due before then.`
+    ?`What the balance should be today${P.todayPays.length?', after today\'s pay-ins':''}, to cover every bill in this pay run and the next (up to ${esc(fmtDay(P.until-1))}) without dropping below your ${f0(P.buf)} buffer. Everyone puts in their usual amount on payday.`
     :`No bills are in the plan yet. Import 2 or 3 months of statements in Settings, or add bills on the Bills tab.`;
   let rows='';
   if(P.bal!=null){
@@ -754,7 +779,13 @@ function heroHtml(P){
     const isToday=r.next===P.t;
     rows+=`<button class="hrow hbtn" data-act="ownerBills" data-id="${esc(r.p.id)}" aria-label="See ${esc(poss(r.p.name))} bills"><div class="l">${esc(r.p.name)}<small>Puts in ${esc(r.f.label.toLowerCase())}${isToday?' · <strong>payday today</strong>, counted in the figure above':r.next!=null?' · next '+esc(fmtDay(r.next)):' · no payday set'} · ${plural(r.nBills,'bill')}</small></div><div class="v">${f0(r.payIn)}<span class="harrow" aria-hidden="true">›</span></div></button>`;
   });
-  return `<section class="hero"><p class="eyebrow">Should be in the account now</p><p class="big">${up(P.required)}</p><p class="sub">${sub}</p><div class="rows">${rows}</div></section>`;
+  const nb=P.working.filter(w=>!w.e.pay),np=P.working.filter(w=>w.e.pay);
+  const low=P.working.reduce((m,w)=>Math.min(m,w.bal),P.required);
+  const work=P.nAct?`<details class="working" ${openWorking?'open':''}><summary>Show the working</summary>
+    <p>${plural(nb.length,'bill')} (${f2(nb.reduce((n,w)=>n+w.e.amt,0))}) and ${plural(np.length,'pay-in')} (${f2(np.reduce((n,w)=>n+w.e.amt,0))}) up to ${esc(fmtDay(P.until-1))}. Starting from ${f2(P.required)}, the lowest the balance gets is ${f2(low)}.</p>
+    <ul class="wlist"><li class="wstart"><span>${esc(fmtShort(P.t))}</span><span>Today${P.todayPays.length?'<small>after '+esc(P.todayPays.map(e=>e.person.name).join(' and '))+' pays in</small>':''}</span><span>${f2(P.required)}</span></li>
+    ${P.working.map(w=>`<li class="${w.e.pay?'win':''} ${Math.abs(w.bal-low)<0.005?'wlow':''}"><span>${esc(fmtShort(w.e.d))}</span><span>${esc(w.e.pay?w.e.person.name+' pays in':w.e.bl.name)}<small>${w.e.pay?'+':'−'}${f2(w.e.amt)}</small></span><span>${f2(w.bal)}</span></li>`).join('')}</ul></details>`:'';
+  return `<section class="hero"><p class="eyebrow">Should be in the account now</p><p class="big">${up(P.required)}</p><p class="sub">${sub}</p><div class="rows">${rows}</div>${work}</section>`;
 }
 function warnHtml(P){
   const out=[];
@@ -1399,7 +1430,7 @@ document.addEventListener('change',async e=>{
 });
 document.addEventListener('submit',e=>{if(e.target&&e.target.id==='signinForm'){e.preventDefault();doSignin();}});
 document.addEventListener('keydown',e=>{if(e.key!=='Enter')return;if(e.target.id==='newCat'){e.preventDefault();if(newCategory(e.target.value)){persist();render();}}});
-document.addEventListener('toggle',e=>{const d=e.target;if(!d||!d.dataset)return;if(d.dataset.i!=null){const i=+d.dataset.i;if(d.open)openSeg.add(i);else openSeg.delete(i);}if(d.dataset.pid!=null){if(d.open)openPeople.add(d.dataset.pid);else openPeople.delete(d.dataset.pid);}},true);
+document.addEventListener('toggle',e=>{const d=e.target;if(!d||!d.dataset)return;if(d.classList&&d.classList.contains('working'))openWorking=d.open;if(d.dataset.i!=null){const i=+d.dataset.i;if(d.open)openSeg.add(i);else openSeg.delete(i);}if(d.dataset.pid!=null){if(d.open)openPeople.add(d.dataset.pid);else openPeople.delete(d.dataset.pid);}},true);
 
 boot();
 (async()=>{try{dl=window.claude&&window.claude.use?await window.claude.use('downloads'):null;}catch(e){dl=null;}})();
