@@ -211,6 +211,22 @@ details[open] .chev{transform:rotate(-135deg);margin-top:3px}
 .blist.sub{margin:0 0 6px 16px;border-left:2px solid var(--line)}
 .blist.sub>li{border-top:1px dashed var(--line)}
 .blist.sub>li:first-child{border-top:0}
+.pblock{border-top:1px solid var(--line);padding:14px 16px;display:grid;gap:10px}
+.pblock.open{background:color-mix(in srgb,var(--accent-soft) 35%,transparent)}
+.pblock.nobody{background:color-mix(in srgb,var(--warn-soft) 45%,transparent)}
+.ptop{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:start}
+.pname{font:700 17px/1.2 var(--f-body)}
+.ptop .bs{color:var(--muted);font-size:13px;margin-top:2px}
+.ppay{font:600 20px var(--f-num);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.ppay small{display:block;font:600 10.5px var(--f-num);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.pbills{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:10px;background:var(--surface);overflow:hidden}
+.pbills li+li{border-top:1px solid var(--line)}
+.pbill{width:100%;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;background:none;border:0;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.pbill .n{min-width:0;overflow-wrap:anywhere;font-weight:600;font-size:14.5px}
+.pbill .n small{display:block;font-weight:400;font-size:12.5px;color:var(--muted)}
+.pbill .a{font:600 14px var(--f-num);font-variant-numeric:tabular-nums;white-space:nowrap}
+.pfoot{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;color:var(--muted);font-size:13px}
+.pblock .editor{padding:0}
 .quickown{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:center;margin:0 16px 12px;padding:8px 10px;border-radius:10px;background:var(--warn-soft);color:var(--warn);font-weight:600;font-size:14px}
 .quickown select{min-height:40px;background:var(--surface)}
 .txbox{margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)}
@@ -737,15 +753,31 @@ function personEditor(r){
   ${x&&n>1?`<button class="btn danger" data-act="pdel" data-id="${esc(x.id)}">${confirmPerson===x.id?'Tap again to remove':'Remove'}</button>`:''}</div>${msgHtml('person')}</div>`;
 }
 function personHtml(P){
-  const list=P.people.map(r=>{const id=r.p.id,open=editingP===id;
-    return `<li class="${open?'open':''}"><button class="brow" data-act="pedit" data-id="${esc(id)}" aria-expanded="${open}">
-      <span class="dot" style="--cc:var(--accent)"></span>
-      <span><span class="bn">${esc(r.p.name)}</span><span class="bs">${esc(r.f.label)}${r.next!=null?' · next '+esc(fmtDay(r.next)):''}${r.next==null?' <span class="pill warn">No payday</span>':''}</span>
-      <span class="bs">${plural(r.nBills,'bill')}, ${f2(r.perPay)} per pay${r.custom?' · set amount':''}</span></span>
-      <span class="bamt">${f0(r.payIn)}</span><span class="chev"></span></button>${open?personEditor(r):''}</li>`;}).join('');
-  return `<section class="card flush"><div class="hd"><h2>Who puts in what</h2><p>Each person pays all of the bills they own, spread across their own pay cycle. Tap someone to change their payday or amount.</p></div>
-    <ul class="blist">${list}</ul>
-    ${editingP==='new'?`<div class="hd" style="padding-top:8px"><h2>New person</h2></div>${personEditor(null)}`:`<div style="padding:12px 16px 16px"><button class="btn" data-act="pnew">Add a person</button></div>`}</section>`;
+  const t=P.t;
+  const billRow=b=>{const nd=nextDue(b,t);return `<li><button class="pbill" data-act="gotoBill" data-id="${esc(b.id)}">
+      <span class="dot" style="${cc(b.category)}"></span>
+      <span class="n">${esc(b.name)}<small>${esc(cadLabel(b))}${nd!=null?' · next '+esc(fmtDay(nd)):''}</small></span>
+      <span class="a">${f2(b.amount)}</span></button></li>`;};
+  const byDue=(a,b)=>((nextDue(a,t)??1e9)-(nextDue(b,t)??1e9));
+  const blocks=P.people.map(r=>{
+    const id=r.p.id,open=editingP===id;
+    const bills=S.bills.filter(b=>b.include&&b.owner===id).sort(byDue);
+    return `<div class="pblock ${open?'open':''}">
+      <div class="ptop"><div><div class="pname">${esc(r.p.name)}</div>
+        <div class="bs">${esc(r.f.label)}${r.next!=null?' · next payday '+esc(fmtDay(r.next)):' <span class="pill warn">No payday</span>'}</div></div>
+        <div class="ppay"><small>Puts in</small>${f0(r.payIn)}</div></div>
+      ${bills.length?`<ul class="pbills">${bills.map(billRow).join('')}</ul>`:'<p class="note">No bills yet. Pick this person as "Who pays" on a bill.</p>'}
+      <div class="pfoot"><span>${plural(bills.length,'bill')} · ${f2(r.perPay)} per pay${r.custom?' · set amount':''}</span>
+        <button class="btn small ghost" data-act="pedit" data-id="${esc(id)}" aria-expanded="${open}">${open?'Close':'Edit'}</button></div>
+      ${open?personEditor(r):''}</div>`;
+  }).join('');
+  const none=S.bills.filter(b=>b.include&&!S.people.some(x=>x.id===b.owner)).sort(byDue);
+  const noneBlock=none.length?`<div class="pblock nobody"><div class="ptop"><div><div class="pname">No owner yet</div><div class="bs">Nobody's pay-in covers these</div></div></div>
+      <ul class="pbills">${none.map(billRow).join('')}</ul>
+      <div class="pfoot"><span>${plural(none.length,'bill')}</span><button class="btn small" data-act="showUnassigned">Assign owners</button></div></div>`:'';
+  return `<section class="card flush"><div class="hd"><h2>Who puts in what</h2><p>Each person pays all of the bills they own, spread across their own pay cycle. Tap a bill to change it.</p></div>
+    ${blocks}${noneBlock}
+    ${editingP==='new'?`<div class="pblock open"><div class="pname">New person</div>${personEditor(null)}</div>`:`<div style="padding:12px 16px 16px;border-top:1px solid var(--line)"><button class="btn" data-act="pnew">Add a person</button></div>`}</section>`;
 }
 function catHtml(P){
   if(!P.catRows.length)return '';
@@ -1274,6 +1306,10 @@ document.addEventListener('click',async e=>{
   else if(a==='filter'){catFilter=el.dataset.cat;editing=null;render();}
   else if(a==='showUnassigned'){tab='bills';ownFilter='none';catFilter='all';editing=null;msg=null;render();}
   else if(a==='ofilter'){ownFilter=el.dataset.own;editing=null;render();}
+  else if(a==='gotoBill'){
+    tab='bills';catFilter='all';ownFilter='all';editing=el.dataset.id;editingP=null;msg=null;render();
+    const row=[...document.querySelectorAll('.brow')].find(x=>x.dataset.id===editing);if(row)row.scrollIntoView({block:'center'});
+  }
   else if(a==='pedit'){const id=el.dataset.id;editingP=editingP===id?null:id;msg=null;render();}
   else if(a==='pnew'){editingP='new';msg=null;render();const n=$('#p-name');if(n)n.focus();}
   else if(a==='pcancel'){editingP=null;msg=null;render();}
