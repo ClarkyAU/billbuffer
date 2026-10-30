@@ -1,8 +1,9 @@
 // Bump VERSION whenever you change any file in this folder so phones pick up the update.
-const VERSION = 'bill-buffer-v20';
+const VERSION = 'bill-buffer-v21';
 const FILES = [
   './', './index.html', './manifest.webmanifest',
-  './icon-192.png', './icon-512.png', './icon-maskable-512.png'
+  './icon-192.png', './icon-512.png', './icon-maskable-512.png',
+  './fonts/archivo.woff2', './fonts/onest.woff2'
 ];
 
 self.addEventListener('install', e => {
