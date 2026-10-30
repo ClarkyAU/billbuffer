@@ -1,7 +1,12 @@
 # Bill Buffer for TrueNAS
-# Paste into Apps > Discover Apps > Custom App > Install via YAML.
-# On every start the container downloads the app from GitHub and serves it on port 47219.
-# Your bills and statements are never stored here; they live on your phone.
+# Paste into Apps > Discover Apps > Custom App > Install via YAML (or Edit on the existing app).
+#
+# BEFORE YOU SAVE: change BB_PASSCODE below to your own household passcode.
+#   - at least 8 characters, longer is better (a short phrase works well)
+#   - don't use the $ sign, it has a special meaning in this file
+#
+# Your bills are stored in the "bill-buffer-data" volume on this server and shared by every
+# signed-in device. The app itself is downloaded from GitHub each time the container starts.
 x-portals:
   - name: Web UI
     scheme: http
@@ -10,18 +15,42 @@ x-portals:
     path: /
 services:
   bill-buffer:
-    image: nginx:1.27-alpine
+    image: python:3.12-alpine
     container_name: bill-buffer
     restart: unless-stopped
     ports:
-      - "47219:80"
+      - "47219:8080"
+    environment:
+      BB_PASSCODE: "change-me-to-something-long"
+      PYTHONDONTWRITEBYTECODE: "1"
+    volumes:
+      - bill-buffer-data:/data
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - FOWNER
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
+    security_opt:
+      - no-new-privileges:true
     entrypoint:
-      - /bin/sh
+      - python3
+      - -u
       - -c
       - |
-        until (wget -qO /tmp/app.tgz https://codeload.github.com/ClarkyAU/billbuffer/tar.gz/refs/heads/main || curl -fsSL -o /tmp/app.tgz https://codeload.github.com/ClarkyAU/billbuffer/tar.gz/refs/heads/main) && mkdir -p /tmp/bb && tar xzf /tmp/app.tgz -C /tmp/bb; do
-          echo "Could not download Bill Buffer, retrying in 15s"; sleep 15
-        done
-        cp /tmp/bb/billbuffer-main/nginx.conf /etc/nginx/conf.d/default.conf
-        cp -r /tmp/bb/billbuffer-main/site/. /usr/share/nginx/html/
-        exec nginx -g 'daemon off;'
+        import io, runpy, sys, tarfile, time, urllib.request
+        URL = "https://codeload.github.com/ClarkyAU/billbuffer/tar.gz/refs/heads/main"
+        while True:
+            try:
+                data = urllib.request.urlopen(URL, timeout=30).read()
+                tarfile.open(fileobj=io.BytesIO(data)).extractall("/opt", filter="data")
+                break
+            except Exception as e:
+                print("Could not download Bill Buffer, retrying in 15s:", e, flush=True)
+                time.sleep(15)
+        sys.argv = ["server.py"]
+        runpy.run_path("/opt/billbuffer-main/server.py", run_name="__main__")
+volumes:
+  bill-buffer-data:

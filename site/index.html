@@ -656,7 +656,8 @@ function cleanState(st,keepExample){
 
 /* ---------- storage ---------- */
 function load(){try{const raw=localStorage.getItem(KEY);if(raw){const o=JSON.parse(raw);if(o&&o.settings&&Array.isArray(o.bills))return cleanState(o,true);}}catch(e){}return null;}
-function persist(touch){if(touch!==false)S.meta.changed=Date.now();try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
+function persist(touch){if(touch!==false)S.meta.changed=Date.now();try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}
+  if(touch!==false&&typeof Sync!=='undefined'&&Sync&&Sync.mode==='on')queuePush();}
 S=load();if(!S){S=buildExample();persist(false);}else persist(false);
 
 /* ---------- formatting ---------- */
@@ -674,7 +675,7 @@ const fmtLong=n=>new Date(n*864e5).toLocaleDateString('en-AU',{day:'numeric',mon
 const fmtFull=n=>new Date(n*864e5).toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long',timeZone:'UTC'});
 const fmtMonth=(y,m)=>new Date(Date.UTC(y,m,1)).toLocaleDateString('en-AU',{month:'long',year:'numeric',timeZone:'UTC'});
 const ord=n=>{const v=n%100;if(v>=11&&v<=13)return n+'th';return n+(({1:'st',2:'nd',3:'rd'})[n%10]||'th');};
-const plural=(n,w)=>n+' '+w+(n===1?'':'s');
+const plural=(n,w,pl)=>n+' '+(n===1?w:(pl||w+'s'));
 function ago(ts){
   if(!ts)return null;const t=typeof ts==='number'?ts:Date.parse(ts);if(!t)return null;
   const m=Math.round((Date.now()-t)/6e4);if(m<1)return 'just now';if(m<60)return plural(m,'minute')+' ago';
@@ -935,10 +936,10 @@ function viewBackup(){
   const status=lb?`Last backup ${ago(lb)}.${stale?' You have changed things since.':''}`:'No backup yet.';
   const pill=!lb?'<span class="pill bad">None</span>':stale?'<span class="pill warn">Out of date</span>':'<span class="pill good">Up to date</span>';
   const restore=pendingRestore?`<div class="msg"><strong>Restore ${esc(pendingRestore.name)}?</strong><br>This replaces everything now on this phone${pendingRestore.exportedAt?' with the backup from '+esc(fmtLong(Math.floor(Date.parse(pendingRestore.exportedAt)/864e5))):''}.<div class="btnrow"><button class="btn small" data-act="restoreYes">Restore</button><button class="btn small ghost" data-act="restoreNo">Cancel</button></div></div>`:'';
-  return `<section class="card"><h2>Back up to Google Drive ${pill}</h2><p>${esc(status)}</p>
+  return `${syncCardHtml()}<section class="card"><h2>Back up to Google Drive ${pill}</h2><p>${esc(status)}</p>
     <ol class="steps"><li>Tap the button below.</li><li>When your phone asks where to send the file, pick Drive.</li><li>Choose a folder and save.</li></ol>
     <div class="btnrow"><button class="btn" data-act="backup">Back up to Drive</button></div>${msgHtml('backup')}</section>
-  <section class="card"><h2>Restore from a backup</h2><p>Your data lives in this browser. If its site data is cleared or you switch phones, restore the latest backup file from Drive. Backups from the older version work too.</p>
+  <section class="card"><h2>Restore from a backup</h2><p>${Sync.mode==='on'?'Restoring replaces the shared bills for every device.':'Your data lives in this browser. If its site data is cleared or you switch phones, restore the latest backup file from Drive.'} Backups from older versions work too.</p>
     <div class="btnrow"><label class="btn ghost filebtn">Choose backup file<input id="fileRestore" type="file" accept=".json,application/json"></label></div>${restore}${msgHtml('restore')}</section>
   ${resetHtml()}`;
 }
@@ -952,11 +953,169 @@ function resetHtml(){
     <ul class="rlist">${opts.map(([k,t,d,b])=>`<li><div><strong>${t}</strong><p>${d}</p></div><button class="btn small danger" data-act="reset" data-kind="${k}">${confirmReset===k?'Tap again':b}</button></li>`).join('')}</ul>${msgHtml('reset')}</section>`;
 }
 
+/* ---------- sharing through the household server ----------
+   When the app is served by its own server (TrueNAS), every device signs in once with the
+   household passcode and gets its own token. Changes are saved to the server with a version
+   number; a save based on an old version comes back as a conflict and the user picks a copy.
+   Elsewhere (a file, or the Claude preview) the app stays on this device only. */
+var Sync={mode:'local',status:'',conflict:null,timer:null,poll:null,lastOk:null,busy:false,gen:0,signinErr:'',confirmAll:false};
+const SKEY='billbuffer.sync';
+let SY=(()=>{try{return JSON.parse(localStorage.getItem(SKEY))||{};}catch(e){return {};}})();
+function sySave(){try{localStorage.setItem(SKEY,JSON.stringify(SY));}catch(e){}}
+async function api(method,path,body){
+  const hd={'Content-Type':'application/json'};if(SY.token)hd.Authorization='Bearer '+SY.token;
+  const r=await fetch('api/'+path,{method,headers:hd,body:body?JSON.stringify(body):undefined,cache:'no-store',credentials:'omit'});
+  let j=null;try{j=await r.json();}catch(e){}
+  return {status:r.status,data:j};
+}
+const guessDevice=()=>/Android|iPhone|Mobile/i.test(navigator.userAgent)?'Phone':'Computer';
+function canApplyRemote(){const a=document.activeElement;return !editing&&!editingP&&!pendingRestore&&!(a&&/^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName));}
+function syncChip(){
+  if(Sync.mode!=='on')return `<small id="syncChip">${esc(fmtDay(today()))}</small>`;
+  const map={synced:['good','Synced'],saving:['acc','Saving…'],offline:['warn','Offline'],conflict:['bad','Choose a copy']};
+  const [k,l]=map[Sync.status]||['acc','Connecting…'];
+  return `<span id="syncChip" class="pill ${k}" role="status">${l}</span>`;
+}
+function setSyncStatus(s){Sync.status=s;const el=$('#syncChip');if(el)el.outerHTML=syncChip();}
+function writeLocal(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
+function adoptRemote(cur){S=cleanState(cur.state,false);SY.version=cur.version;SY.pending=false;sySave();writeLocal();}
+function queuePush(){
+  if(Sync.mode!=='on')return;
+  Sync.gen++;SY.pending=true;sySave();
+  clearTimeout(Sync.timer);Sync.timer=setTimeout(pushNow,700);
+  if(Sync.status!=='conflict')setSyncStatus('saving');
+}
+async function pushNow(){
+  clearTimeout(Sync.timer);Sync.timer=null;
+  if(Sync.mode!=='on'||!SY.pending||Sync.conflict)return;
+  if(Sync.busy){Sync.timer=setTimeout(pushNow,700);return;}
+  Sync.busy=true;const gen=Sync.gen;setSyncStatus('saving');
+  try{
+    const r=await api('PUT','state',{base:SY.version||0,state:S});
+    if(r.status===200){
+      SY.version=r.data.version;Sync.lastOk=Date.now();
+      if(Sync.gen===gen){SY.pending=false;setSyncStatus('synced');}else Sync.timer=setTimeout(pushNow,300);
+      sySave();
+    } else if(r.status===409){Sync.conflict=r.data;setSyncStatus('conflict');render();}
+    else if(r.status===401){Sync.busy=false;return signedOut(false);}
+    else setSyncStatus('offline');
+  }catch(e){setSyncStatus('offline');}
+  Sync.busy=false;
+}
+async function pullNow(){
+  if(Sync.mode!=='on'||Sync.busy||Sync.conflict)return;
+  if(SY.pending)return pushNow();
+  try{
+    const r=await api('GET','state?since='+(SY.version||0));
+    if(r.status===401)return signedOut(false);
+    if(r.status!==200){setSyncStatus('offline');return;}
+    Sync.lastOk=Date.now();
+    if(r.data.unchanged||!r.data.state){setSyncStatus('synced');return;}
+    if(canApplyRemote()){adoptRemote(r.data);setSyncStatus('synced');render();}
+  }catch(e){setSyncStatus('offline');}
+}
+function startPolling(){stopPolling();Sync.poll=setInterval(()=>{if(document.visibilityState==='visible')pullNow();},30000);}
+function stopPolling(){clearInterval(Sync.poll);Sync.poll=null;}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')pullNow();});
+window.addEventListener('online',()=>pullNow());
+function signedOut(wipe){
+  stopPolling();clearTimeout(Sync.timer);
+  SY={device:SY.device};sySave();
+  if(wipe){S=defaults();writeLocal();}
+  Sync.mode='signin';Sync.status='';Sync.conflict=null;Sync.signinErr=wipe?'':'This device was signed out. Sign in again to keep sharing.';
+  render();
+}
+const hasOwnData=()=>!S.example&&(S.bills.length>0||S.txns.length>0);
+async function firstSync(){
+  try{
+    const r=await api('GET','state');
+    if(r.status===401)return signedOut(false);
+    if(r.status!==200){setSyncStatus('offline');render();return;}
+    const cur=r.data;
+    if(SY.pending&&SY.version!=null){render();return pushNow();}
+    if(!cur.state){
+      if(S.example){S=defaults();writeLocal();}
+      SY.version=cur.version||0;sySave();Sync.gen++;SY.pending=true;render();return pushNow();
+    }
+    if(SY.version==null&&hasOwnData()){Sync.conflict=Object.assign({first:true},cur);setSyncStatus('conflict');render();return;}
+    adoptRemote(cur);Sync.lastOk=Date.now();setSyncStatus('synced');render();
+  }catch(e){setSyncStatus('offline');render();}
+}
+async function syncInit(){
+  if(location.protocol==='file:')return;
+  let st=null,reached=false;
+  try{const r=await fetch('api/status',{cache:'no-store',credentials:'omit'});reached=true;if(r.ok)st=await r.json();}catch(e){}
+  if(!st||st.app!=='bill-buffer'){
+    if(SY.token&&!reached){Sync.mode='on';Sync.status='offline';startPolling();render();}
+    return;
+  }
+  if(!st.ready){Sync.mode='nopass';render();return;}
+  if(!SY.token){Sync.mode='signin';render();return;}
+  Sync.mode='on';Sync.status='';startPolling();render();await firstSync();
+}
+async function doSignin(){
+  const pass=$('#si-pass').value,device=($('#si-dev').value||'').trim()||guessDevice();
+  if(!pass){Sync.signinErr='Enter the household passcode.';render();return;}
+  let r;
+  try{r=await api('POST','login',{passcode:pass,device});}catch(e){Sync.signinErr="Can't reach the server. Check you're on your home network.";render();return;}
+  if(r.status===200&&r.data&&r.data.token){
+    SY={token:r.data.token,device,version:null,pending:false};sySave();
+    Sync.mode='on';Sync.status='';Sync.signinErr='';startPolling();render();await firstSync();return;
+  }
+  if(r.status===429){const m=Math.max(1,Math.ceil(((r.data&&r.data.retryAfter)||900)/60));Sync.signinErr=`Too many wrong tries. Try again in ${plural(m,'minute')}.`;}
+  else if(r.status===401){const n=r.data&&r.data.triesLeft;Sync.signinErr=`That passcode isn't right.${n>0?` ${plural(n,'try','tries')} left before a 15 minute lockout.`:''}`;}
+  else if(r.status===503){Sync.mode='nopass';}
+  else Sync.signinErr='Sign-in failed. Try again.';
+  render();
+}
+function signinHtml(){
+  return `<section class="card"><h2>Sign in to your household</h2><p>This copy of Bill Buffer is shared between your devices. Enter the household passcode once on this device.</p>
+    <form id="signinForm" autocomplete="on"><div class="fields">
+      <div class="field wide"><label for="si-pass">Household passcode</label><input id="si-pass" type="password" autocomplete="current-password"></div>
+      <div class="field wide"><label for="si-dev">Name this device</label><input id="si-dev" type="text" maxlength="40" value="${esc(SY.device||guessDevice())}"></div>
+    </div><div class="btnrow"><button class="btn" type="submit">Sign in</button></div></form>
+    ${Sync.signinErr?`<div class="msg bad" role="status">${esc(Sync.signinErr)}</div>`:''}</section>`;
+}
+function nopassHtml(){
+  return `<section class="card"><h2>Set a household passcode</h2><p>Sharing is switched off until the server has a passcode.</p>
+    <ol class="steps"><li>In TrueNAS, open Apps, then bill-buffer, then Edit.</li><li>Change <code>BB_PASSCODE</code> to something only your household knows, at least 8 characters, without a <code>$</code> sign.</li><li>Save. The app restarts and asks each device for the passcode.</li></ol></section>`;
+}
+function conflictHtml(){
+  const c=Sync.conflict;if(!c)return '';
+  const who=c.updatedBy||'another device',n=c.state&&Array.isArray(c.state.bills)?c.state.bills.length:0;
+  const why=c.first?`The server already has shared bills (${plural(n,'bill')}, last changed by ${esc(who)}). This device has its own bills as well.`
+    :`${esc(who)} changed the bills while this device had changes that hadn't been saved yet.`;
+  return `<section class="banner"><p><strong>Choose which copy to keep.</strong> ${why}</p><p>The other copy is replaced. The server keeps its last 30 versions, so nothing is lost for good.</p>
+    <div class="btnrow"><button class="btn small" data-act="keepServer">Use the shared copy</button><button class="btn small" data-act="keepMine">Use this device's copy</button></div></section>`;
+}
+function syncCardHtml(){
+  if(Sync.mode!=='on')return '';
+  return `<section class="card"><h2>Sharing ${syncChip().replace('id="syncChip"','')}</h2>
+    <p>Your bills are kept on your own server and shared with every signed-in device. This device is <strong>${esc(SY.device||'this device')}</strong>.${Sync.lastOk?' Last synced '+esc(ago(Sync.lastOk))+'.':''}</p>
+    <ul class="files" id="devList"><li><span>Loading devices…</span><span></span></li></ul>
+    <div class="btnrow"><button class="btn small ghost" data-act="syncNow">Sync now</button><button class="btn small ghost" data-act="signOut">Sign out this device</button>
+    <button class="btn small danger" data-act="signOutAll">${Sync.confirmAll?'Tap again to sign out all':'Sign out every device'}</button></div>
+    <p class="note">Signing out removes the bills from this device. They stay on the server. Use "Sign out every device" if a phone is lost.</p></section>`;
+}
+async function loadDevices(){
+  const el=$('#devList');if(!el)return;
+  try{const r=await api('GET','devices');if(r.status!==200)throw 0;
+    const L=$('#devList');if(!L)return;
+    L.innerHTML=r.data.devices.map(d=>`<li><span>${esc(d.device||'Device')}${d.you?' <span class="pill acc">This device</span>':''}</span><span>${d.lastSeen?'used '+esc(ago(d.lastSeen*1000)):''}</span></li>`).join('')||'<li><span>No devices</span><span></span></li>';
+  }catch(e){const L=$('#devList');if(L)L.innerHTML='<li><span>Device list unavailable offline</span><span></span></li>';}
+}
+
 function render(){
   const tabs=[['now','Now'],['calendar','Calendar'],['bills','Bills'],['import','Import'],['backup','Data']];
+  if(Sync.mode==='signin'||Sync.mode==='nopass'){
+    $('#app').innerHTML=`<div class="top"><h1>Bill Buffer</h1>${syncChip()}</div>${Sync.mode==='signin'?signinHtml():nopassHtml()}`;
+    const f=$('#si-pass');if(f&&Sync.mode==='signin')f.focus();
+    return;
+  }
   const body=tab==='now'?viewNow():tab==='calendar'?viewCalendar():tab==='bills'?viewBills():tab==='import'?viewImport():viewBackup();
-  $('#app').innerHTML=`<div class="top"><h1>Bill Buffer</h1><small>${esc(fmtDay(today()))}</small></div>
-    <nav class="tabs" role="tablist">${tabs.map(([k,l])=>`<button class="tab" role="tab" aria-selected="${tab===k}" data-act="tab" data-tab="${k}">${l}</button>`).join('')}</nav>${body}`;
+  $('#app').innerHTML=`<div class="top"><h1>Bill Buffer</h1>${syncChip()}</div>
+    <nav class="tabs" role="tablist">${tabs.map(([k,l])=>`<button class="tab" role="tab" aria-selected="${tab===k}" data-act="tab" data-tab="${k}">${l}</button>`).join('')}</nav>${conflictHtml()}${body}`;
+  if(tab==='backup'&&Sync.mode==='on')loadDevices();
 }
 
 /* ---------- actions ---------- */
@@ -1088,6 +1247,7 @@ async function onRestoreFile(file){
 document.addEventListener('click',async e=>{
   const el=e.target.closest('[data-act]');if(!el)return;const a=el.dataset.act;
   if(a!=='reset')confirmReset=null;
+  if(a!=='signOutAll')Sync.confirmAll=false;
   if(a!=='recheck')confirmRecheck=null;
   if(a!=='delBill')confirmDel=null;
   if(a!=='catDel')confirmCat=null;
@@ -1098,6 +1258,11 @@ document.addEventListener('click',async e=>{
   else if(a==='new'){editing='new';msg=null;render();const n=$('#e-name');if(n)n.focus();}
   else if(a==='cancelEdit'){editing=null;msg=null;render();}
   else if(a==='saveBill')saveBill();
+  else if(a==='keepServer'&&Sync.conflict){adoptRemote(Sync.conflict);Sync.conflict=null;Sync.lastOk=Date.now();setSyncStatus('synced');render();}
+  else if(a==='keepMine'&&Sync.conflict){SY.version=Sync.conflict.version;Sync.conflict=null;Sync.gen++;SY.pending=true;sySave();render();pushNow();}
+  else if(a==='syncNow'){await pullNow();render();}
+  else if(a==='signOut'){try{await api('POST','logout',{});}catch(e){}signedOut(true);}
+  else if(a==='signOutAll'){if(!Sync.confirmAll){Sync.confirmAll=true;render();return;}try{await api('POST','logout-all',{});}catch(e){}Sync.confirmAll=false;signedOut(true);}
   else if(a==='splitTx')splitTx();
   else if(a==='recheck'){if(confirmRecheck!==editing){confirmRecheck=editing;render();}else recheck();}
   else if(a==='delBill'){const id=el.dataset.id;if(confirmDel===id)deleteBill(id);else{confirmDel=id;render();}}
@@ -1133,7 +1298,7 @@ document.addEventListener('click',async e=>{
   else if(a==='restoreNo'){pendingRestore=null;render();}
   else if(a==='restoreYes'&&pendingRestore){
     S=cleanState(pendingRestore.state,false);
-    S.meta.lastBackup=pendingRestore.exportedAt||null;S.meta.changed=Date.now()-5000;persist(false);
+    S.meta.lastBackup=pendingRestore.exportedAt||null;S.meta.changed=Date.now()-5000;persist(false);queuePush();
     pendingRestore=null;editing=null;setMsg('restore','Backup restored.','good');render();
   }
   else if(a==='reset'){
@@ -1169,10 +1334,12 @@ document.addEventListener('change',async e=>{
     const f=el.files&&el.files[0];el.value='';if(f)await onRestoreFile(f);
   }
 });
+document.addEventListener('submit',e=>{if(e.target&&e.target.id==='signinForm'){e.preventDefault();doSignin();}});
 document.addEventListener('keydown',e=>{if(e.key!=='Enter')return;if(e.target.id==='newCat'){e.preventDefault();if(newCategory(e.target.value)){persist();render();}}});
 document.addEventListener('toggle',e=>{const d=e.target;if(d&&d.dataset&&d.dataset.i!=null){const i=+d.dataset.i;if(d.open)openSeg.add(i);else openSeg.delete(i);}},true);
 
 render();
+syncInit();
 (async()=>{try{dl=window.claude&&window.claude.use?await window.claude.use('downloads'):null;}catch(e){dl=null;}})();
 if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost'))navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script>
