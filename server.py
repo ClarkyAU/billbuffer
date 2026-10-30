@@ -137,7 +137,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.security_headers()
         self.end_headers()
-        self.wfile.write(body)
+        if self.command != "HEAD":
+            self.wfile.write(body)
 
     def read_body(self):
         length = int(self.headers.get("Content-Length") or 0)
@@ -284,6 +285,11 @@ class Handler(BaseHTTPRequestHandler):
         ip = self.client_ip()
         t = now()
         with lock:
+            # forget old failures and finished lockouts so these never grow without limit
+            for k in [k for k, v in fails.items() if not v or v[-1] <= t - FAIL_WINDOW]:
+                fails.pop(k, None)
+            for k in [k for k, v in locked_until.items() if v <= t]:
+                locked_until.pop(k, None)
             if locked_until.get(ip, 0) > t:
                 return self.send_json(429, {"error": "locked", "retryAfter": locked_until[ip] - t})
         if open_mode():
@@ -316,6 +322,9 @@ class Handler(BaseHTTPRequestHandler):
             path = "/index.html"
         full = os.path.realpath(os.path.join(SITE, path.lstrip("/")))
         if not full.startswith(os.path.realpath(SITE) + os.sep) or not os.path.isfile(full):
+            # a missing file such as a font or icon is a real 404; any other path opens the app
+            if os.path.splitext(path)[1]:
+                return self.send_json(404, {"error": "not_found"})
             full = os.path.join(SITE, "index.html")
         ctype = mimetypes.guess_type(full)[0] or "application/octet-stream"
         with open(full, "rb") as f:

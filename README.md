@@ -24,13 +24,13 @@ saves that one version, so everyone always sees the same thing. If two people sa
 the second save is refused and that person is shown the latest version to redo their change. The app needs
 to reach the server to show or change bills.
 
-Deleting the app in TrueNAS can delete the volume too. Keep a Drive backup from the Data tab.
+Deleting the app in TrueNAS can delete the volume too. Keep a Drive backup from Settings > Backup.
 
 ## Security
 
 - **Passcode is optional.** With `BB_PASSCODE` empty, anyone who can reach the server on your network can use it.
   With a passcode, devices sign in once and get their own token (only a SHA-256 hash is stored), five wrong
-  tries lock sign-in for 15 minutes, and you can sign out one device or every device from the Data tab.
+  tries lock sign-in for 15 minutes, and you can sign out one device or every device from Settings > Sharing.
 - **No silent overwrites.** Saves are versioned; a save based on an older version is refused.
 - **Locked-down container.** The server drops root to an unprivileged user after preparing `/data`, all other
   Linux capabilities are dropped, and `no-new-privileges` is set. Data files are readable by that user only.
