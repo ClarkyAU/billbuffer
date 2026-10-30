@@ -566,8 +566,12 @@ function computePlan(){
   people.forEach(r=>r.dates.forEach(d=>ev.push({d,pay:true,amt:r.payIn,person:r.p})));
   act.forEach(bl=>occurrences(bl,t,end).forEach(d=>ev.push({d,bl,amt:bl.amount})));
   ev.sort((a,b)=>a.d-b.d||(a.pay&&!b.pay?-1:b.pay&&!a.pay?1:b.amt-a.amt));
+  // "Right now" only has to carry the account until everyone's next pay has gone in:
+  // look ahead to the end of each person's next full pay cycle, not a whole year.
+  let until=t+14;
+  people.forEach(r=>{if(!r.dates.length)return;const second=r.dates[1]!=null?r.dates[1]:r.dates[0]+(r.f.days||31);until=Math.max(until,second);});
   let net=0,need=buf;
-  ev.forEach(e=>{net+=e.pay?e.amt:-e.amt;if(!e.pay)need=Math.max(need,buf-net);});
+  ev.forEach(e=>{if(e.d>=until)return;net+=e.pay?e.amt:-e.amt;if(!e.pay)need=Math.max(need,buf-net);});
   const required=need,bal=balanceVal(),start=bal!=null?bal:required;
   const days=new Map();let run=start;
   ev.forEach(e=>{run+=e.pay?e.amt:-e.amt;let x=days.get(e.d);if(!x){x={bills:[],pays:[],bal:0};days.set(e.d,x);}(e.pay?x.pays:x.bills).push(e);x.bal=run;});
@@ -580,7 +584,7 @@ function computePlan(){
   }
   const avg=segs.reduce((n,g)=>n+g.total,0)/segs.length;
   segs.forEach(g=>{g.tight=g.total>=avg*1.2&&g.total-avg>=50;});
-  return {t,buf,required,bal,start,segs,days,catRows,perFn,people,missing,unassigned,nAct:act.length,end,nextPay:ev.find(e=>e.pay)||null};
+  return {t,buf,until,required,bal,start,segs,days,catRows,perFn,people,missing,unassigned,nAct:act.length,end,nextPay:ev.find(e=>e.pay)||null};
 }
 
 /* ---------- example data shown on first open ---------- */
@@ -695,7 +699,7 @@ const exampleBanner=()=>S.example?`<section class="banner"><p><strong>Example da
 /* ---------- Now tab ---------- */
 function heroHtml(P){
   const sub=P.nAct
-    ?`Enough to pay every bill for the next 12 months without dropping below your ${f0(P.buf)} buffer, as long as everyone puts in their amount on their payday.`
+    ?`Covers every bill due up to ${esc(fmtDay(P.until-1))}, by which time everyone has been paid twice, without dropping below your ${f0(P.buf)} buffer. Assumes everyone puts in their amount on payday.`
     :`No bills are in the plan yet. Import 2 or 3 months of statements, or add bills on the Bills tab.`;
   let rows='';
   if(P.bal!=null){
@@ -710,8 +714,8 @@ function heroHtml(P){
 function warnHtml(P){
   const out=[];
   if(P.missing.length)out.push(`Add a next payday for ${esc(P.missing.join(' and '))} under "Who puts in what". Until then their pay-ins aren't counted, which pushes the number above up.`);
-  if(P.unassigned.length)out.push(`${plural(P.unassigned.length,'bill')} ${P.unassigned.length===1?'has':'have'} no owner yet, so nobody's pay-in covers ${P.unassigned.length===1?'it':'them'} and the number above is higher than it should be. <button class="btn small" data-act="showUnassigned">Assign owners</button>`);
-  P.people.filter(r=>r.custom&&r.payIn+0.5<r.perPay).forEach(r=>out.push(`${esc(r.p.name)}'s pay-in is ${f2(r.perPay-r.payIn)} less than their bills cost per pay, so the account runs down over time. The number above covers that gap for 12 months.`));
+  if(P.unassigned.length)out.push(`${plural(P.unassigned.length,'bill')} ${P.unassigned.length===1?'has':'have'} no owner yet, so nobody's pay-in covers ${P.unassigned.length===1?'it':'them'} and the number above includes the full cost of anything due before then. <button class="btn small" data-act="showUnassigned">Assign owners</button>`);
+  P.people.filter(r=>r.custom&&r.payIn+0.5<r.perPay).forEach(r=>out.push(`${esc(r.p.name)}'s pay-in is ${f2(r.perPay-r.payIn)} less than their bills cost per pay, so the account will run down over time. Watch for "Below buffer" in the coming fortnights.`));
   return out.length?`<section class="banner">${out.map(x=>`<p>${x}</p>`).join('')}</section>`:'';
 }
 function personEditor(r){
