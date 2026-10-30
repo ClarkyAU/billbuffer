@@ -204,6 +204,10 @@ details[open] .chev{transform:rotate(-135deg);margin-top:3px}
 .pct{position:relative;display:block}
 .pct input{padding-right:26px}
 .pct i{position:absolute;right:10px;top:50%;transform:translateY(-50%);font:500 14px var(--f-num);font-style:normal;color:var(--muted);pointer-events:none}
+.rlist{list-style:none;margin:8px 0 0;padding:0}
+.rlist li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 0;border-top:1px dashed var(--line)}
+.rlist li:first-child{border-top:0}
+.rlist p{margin:2px 0 0;font-size:13px}
 .addcat{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-top:8px}
 .addcat .btn{min-height:44px}
 
@@ -564,7 +568,7 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const nf=o=>new Intl.NumberFormat('en-AU',Object.assign({style:'currency',currency:'AUD'},o));
 const F2=nf({}),F0=nf({maximumFractionDigits:0,minimumFractionDigits:0});
 const f2=n=>F2.format(n);
-const f0=n=>F0.format(n);
+const f0=n=>F0.format(Math.round(n)||0);
 const up=n=>f0(Math.ceil(n-1e-9)||0);
 const down=n=>f0(Math.floor(n+1e-9)||0);
 const fk=n=>n>=1000?'$'+(n/1000).toFixed(n>=10000?0:1).replace(/\.0$/,'')+'k':'$'+Math.round(n);
@@ -587,7 +591,7 @@ const cc=id=>`--cc:var(--k${catOf(id).color%8})`;
 const ownerName=id=>{const x=S.people.find(q=>q.id===id);return x?x.name:'No owner';};
 
 /* ---------- view state ---------- */
-let tab='now',msg=null,pendingRestore=null,confirmClear=false,dl=null,clearTimer=null;
+let tab='now',msg=null,pendingRestore=null,confirmReset=null,dl=null,clearTimer=null;
 let editing=null,confirmDel=null,catFilter='all',confirmCat=null,ownFilter='all',confirmPerson=null,editingP=null;
 let calY=null,calM=null,selDay=null;
 const openSeg=new Set();
@@ -807,8 +811,7 @@ function viewImport(){
     <div class="field" style="margin-top:14px"><label for="pasteBox">Or paste rows</label><textarea id="pasteBox" placeholder="Date,Amount,Description&#10;03/09/2026,-1850.00,RENT PAYMENT"></textarea></div>
     <div class="btnrow"><button class="btn ghost" data-act="pasteImport">Add pasted rows</button></div>${msgHtml('import')}</section>
   <section class="card"><h2>What's loaded ${cov}</h2><p>${esc(covTxt)}${S.txns.length?`, ${S.txns.length} payments out`:''}.</p>${files}
-    ${S.hidden.length?`<div class="btnrow"><button class="btn small ghost" data-act="unhide">Bring back ${plural(S.hidden.length,'deleted bill')}</button></div>`:''}</section>
-  <section class="card"><h2>Start over</h2><p>Removes every statement, bill, category and setting on this phone.</p><div class="btnrow"><button class="btn danger" data-act="clearAll">${confirmClear?'Tap again to clear everything':'Clear all data'}</button></div></section>`;
+    ${S.hidden.length?`<div class="btnrow"><button class="btn small ghost" data-act="unhide">Bring back ${plural(S.hidden.length,'deleted bill')}</button></div>`:''}</section>`;
 }
 function viewBackup(){
   const lb=S.meta.lastBackup,ch=S.meta.changed;
@@ -820,11 +823,21 @@ function viewBackup(){
     <ol class="steps"><li>Tap the button below.</li><li>When your phone asks where to send the file, pick Drive.</li><li>Choose a folder and save.</li></ol>
     <div class="btnrow"><button class="btn" data-act="backup">Back up to Drive</button></div>${msgHtml('backup')}</section>
   <section class="card"><h2>Restore from a backup</h2><p>Your data lives in this browser. If its site data is cleared or you switch phones, restore the latest backup file from Drive. Backups from the older version work too.</p>
-    <div class="btnrow"><label class="btn ghost filebtn">Choose backup file<input id="fileRestore" type="file" accept=".json,application/json"></label></div>${restore}${msgHtml('restore')}</section>`;
+    <div class="btnrow"><label class="btn ghost filebtn">Choose backup file<input id="fileRestore" type="file" accept=".json,application/json"></label></div>${restore}${msgHtml('restore')}</section>
+  ${resetHtml()}`;
+}
+function resetHtml(){
+  const opts=[
+    ['statements','Clear statements','Removes imported statements and the bills found in them. Keeps people, categories, and bills you added or edited.','Clear statements'],
+    ['bills','Clear all bills','Removes every bill and statement. Keeps people, paydays and categories.','Clear bills'],
+    ['all','Clear everything','Removes all bills, statements, people, categories and settings. The app starts empty.','Clear everything'],
+    ['example','Load the example','Replaces everything with the made-up example so you can see how it works.','Load example']];
+  return `<section class="card" id="reset"><h2>Reset</h2><p>Start again without reinstalling. This can't be undone, so back up first if you might want your data back.</p>
+    <ul class="rlist">${opts.map(([k,t,d,b])=>`<li><div><strong>${t}</strong><p>${d}</p></div><button class="btn small danger" data-act="reset" data-kind="${k}">${confirmReset===k?'Tap again':b}</button></li>`).join('')}</ul>${msgHtml('reset')}</section>`;
 }
 
 function render(){
-  const tabs=[['now','Now'],['calendar','Calendar'],['bills','Bills'],['import','Import'],['backup','Backup']];
+  const tabs=[['now','Now'],['calendar','Calendar'],['bills','Bills'],['import','Import'],['backup','Data']];
   const body=tab==='now'?viewNow():tab==='calendar'?viewCalendar():tab==='bills'?viewBills():tab==='import'?viewImport():viewBackup();
   $('#app').innerHTML=`<div class="top"><h1>Bill Buffer</h1><small>${esc(fmtDay(today()))}</small></div>
     <nav class="tabs" role="tablist">${tabs.map(([k,l])=>`<button class="tab" role="tab" aria-selected="${tab===k}" data-act="tab" data-tab="${k}">${l}</button>`).join('')}</nav>${body}`;
@@ -933,7 +946,7 @@ async function onRestoreFile(file){
 
 document.addEventListener('click',async e=>{
   const el=e.target.closest('[data-act]');if(!el)return;const a=el.dataset.act;
-  if(a!=='clearAll')confirmClear=false;
+  if(a!=='reset')confirmReset=null;
   if(a!=='delBill')confirmDel=null;
   if(a!=='catDel')confirmCat=null;
   if(a!=='pdel')confirmPerson=null;
@@ -979,9 +992,16 @@ document.addEventListener('click',async e=>{
     S.meta.lastBackup=pendingRestore.exportedAt||null;S.meta.changed=Date.now()-5000;persist(false);
     pendingRestore=null;editing=null;setMsg('restore','Backup restored.','good');render();
   }
-  else if(a==='clearAll'){
-    if(!confirmClear){confirmClear=true;clearTimeout(clearTimer);clearTimer=setTimeout(()=>{confirmClear=false;if(tab==='import')render();},4000);render();}
-    else{confirmClear=false;S=defaults();persist();setMsg('import','Everything cleared.','good');render();}
+  else if(a==='reset'){
+    const k=el.dataset.kind;
+    if(confirmReset!==k){confirmReset=k;clearTimeout(clearTimer);clearTimer=setTimeout(()=>{confirmReset=null;if(tab==='backup')render();},5000);render();return;}
+    confirmReset=null;editing=null;editingP=null;catFilter='all';ownFilter='all';openSeg.clear();calY=null;
+    const keepMeta=S.meta;
+    if(k==='statements'){S.txns=[];S.files=[];S.hidden=[];S.bills=S.bills.filter(b=>b.src!=='auto'||b.locked);S.example=false;setMsg('reset','Statements cleared. Your own and edited bills are still there.','good');}
+    else if(k==='bills'){S.txns=[];S.files=[];S.hidden=[];S.notDup=[];S.bills=[];S.example=false;setMsg('reset','All bills cleared.','good');}
+    else if(k==='all'){S=defaults();S.meta=keepMeta;setMsg('reset','Everything cleared. Add your people and paydays on the Now tab to start.','good');}
+    else if(k==='example'){S=buildExample();S.meta=keepMeta;setMsg('reset','Example loaded.','good');}
+    persist();render();
   }
 });
 document.addEventListener('change',async e=>{
