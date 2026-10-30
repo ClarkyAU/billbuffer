@@ -117,6 +117,7 @@ input[type=text],select{font-family:var(--f-body)}
 .btn{min-height:44px;padding:0 16px;border-radius:8px;border:1px solid var(--ink);background:var(--ink);color:var(--bg);font:600 15px var(--f-body);cursor:pointer}
 .btn.ghost{background:none;color:var(--ink);border-color:var(--line)}
 .btn.danger{background:none;color:var(--bad);border-color:var(--bad)}
+.btn[disabled]{opacity:.45;cursor:default}
 .btn.small{min-height:36px;padding:0 12px;font-size:14px}
 .btnrow{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
 .filebtn{position:relative;display:inline-flex;align-items:center;justify-content:center}
@@ -767,7 +768,7 @@ function cleanState(st,keepExample){
   d.files=(Array.isArray(st.files)?st.files:[]).filter(f=>f&&str(f.name)&&num(f.from)&&num(f.to)).map(f=>({name:f.name,from:f.from,to:f.to,rows:num(f.rows)?f.rows:0,added:num(f.added)?f.added:0}));
   const s=st.settings||{};const opt=v=>(v===''||v==null||isNaN(+v))?'':+v;
   d.settings={nextPayday:parseISO(s.nextPayday)!=null?s.nextPayday:'',payDays:num(+s.payDays)&&+s.payDays>=1&&+s.payDays<=31?+s.payDays:14,
-    buffer:num(+s.buffer)&&+s.buffer>=0?+s.buffer:200,balance:opt(s.balance),contribution:opt(s.contribution)};
+    buffer:num(+s.buffer)&&+s.buffer>=0?+s.buffer:200,balance:opt(s.balance),contribution:opt(s.contribution),autoStrip:!!s.autoStrip};
   const m=st.meta||{};d.meta={lastBackup:str(m.lastBackup)?m.lastBackup:null,changed:num(m.changed)?m.changed:null};
   d.example=keepExample?!!st.example:false;
   return d;
@@ -1095,7 +1096,11 @@ function viewImport(inSettings){
     <div class="field" style="margin-top:14px"><label for="pasteBox">Or paste rows</label><textarea id="pasteBox" placeholder="Date,Amount,Description&#10;03/09/2026,-1850.00,RENT PAYMENT"></textarea></div>
     <div class="btnrow"><button class="btn ghost" data-act="pasteImport">Add pasted rows</button></div>${msgHtml('import')}</section>
   <section class="card"><h2>What's loaded ${cov}</h2><p>${esc(covTxt)}${S.txns.length?`, ${S.txns.length} payments out`:''}.</p>${files}
-    ${S.hidden.length?`<div class="btnrow"><button class="btn small ghost" data-act="unhide">Bring back ${plural(S.hidden.length,'deleted bill')}</button></div>`:''}</section>`;
+    ${S.hidden.length&&S.txns.length?`<div class="btnrow"><button class="btn small ghost" data-act="unhide">Bring back ${plural(S.hidden.length,'deleted bill')}</button></div>`:''}</section>
+  <section class="card"><h2>Statement details</h2><p>Keep only your bills. This removes the imported payments and the payment list on each bill. Bills, amounts, dates, owners and changes all stay as they are.</p>
+    <div class="btnrow"><button class="btn danger" data-act="stripNow" ${S.txns.length||S.bills.some(b=>(b.txs||[]).length)?'':'disabled'}>${confirmReset==='strip'?'Tap again to remove':'Remove statement details'}</button></div>
+    <label class="check"><input type="checkbox" id="autoStrip" ${S.settings.autoStrip?'checked':''}> Remove them automatically after each import</label>
+    <p class="note">Without the details, a bill can't be split by its payments or re-checked. Importing again brings them back${S.settings.autoStrip?' briefly, until they are removed again':''}.</p>${msgHtml('strip')}</section>`;
 }
 function viewBackup(){
   const lb=S.meta.lastBackup,ch=S.meta.changed;
@@ -1288,6 +1293,10 @@ function render(){
 }
 
 /* ---------- actions ---------- */
+function stripStatements(){
+  S.bills.forEach(b=>{if(b.src==='auto')b.locked=true;b.txs=[];});
+  S.txns=[];S.files=[];
+}
 function clearExampleData(){S.example=false;S.txns=[];S.bills=[];S.files=[];S.hidden=[];S.notDup=[];S.people=DEFAULT_PEOPLE();}
 async function importTexts(items){
   const results=[];const errs=[];
@@ -1298,10 +1307,10 @@ async function importTexts(items){
     const added=mergeTxns(r.txns);total+=added;const ds=r.txns.map(t=>t.d);
     S.files.push({name:it.name,from:Math.min(...ds),to:Math.max(...ds),rows:r.txns.length,added});
   });
-  if(results.length){redetect();persist();}
+  if(results.length){redetect();if(S.settings.autoStrip)stripStatements();persist();}
   const found=S.bills.filter(b=>b.src==='auto').length;
   const parts=[];
-  if(results.length)parts.push(`Added ${plural(total,'payment')}. ${plural(found,'recurring bill')} found. Check them on the Bills tab.`);
+  if(results.length)parts.push(`Added ${plural(total,'payment')}. ${plural(found,'recurring bill')} found. Check them on the Bills tab.${S.settings.autoStrip?' The statement details were removed afterwards.':''}`);
   if(results.some(x=>x.r.unsigned))parts.push('This file shows every amount as positive, so all rows were treated as payments out. Turn off anything that is not a bill.');
   if(errs.length)parts.push(errs.join(' '));
   setMsg('import',parts.join(' '),errs.length&&!results.length?'bad':'good');
@@ -1418,7 +1427,7 @@ async function onRestoreFile(file){
 
 document.addEventListener('click',async e=>{
   const el=e.target.closest('[data-act]');if(!el)return;const a=el.dataset.act;
-  if(a!=='reset')confirmReset=null;
+  if(a!=='reset'&&a!=='stripNow')confirmReset=null;
   if(a!=='signOutAll')Sync.confirmAll=false;
   if(a!=='recheck')confirmRecheck=null;
   if(a!=='delBill')confirmDel=null;
@@ -1489,6 +1498,10 @@ document.addEventListener('click',async e=>{
     S.meta.lastBackup=pendingRestore.exportedAt||null;S.meta.changed=Date.now()-5000;persist(false);queuePush();
     pendingRestore=null;editing=null;setMsg('restore','Backup restored.','good');render();
   }
+  else if(a==='stripNow'){
+    if(confirmReset!=='strip'){confirmReset='strip';render();return;}
+    confirmReset=null;stripStatements();persist();setMsg('strip','Statement details removed. Your bills are unchanged.','good');render();
+  }
   else if(a==='reset'){
     const k=el.dataset.kind;
     if(confirmReset!==k){confirmReset=k;clearTimeout(clearTimer);clearTimer=setTimeout(()=>{confirmReset=null;if(tab==='settings')render();},5000);render();return;}
@@ -1514,6 +1527,8 @@ document.addEventListener('change',async e=>{
     if(b&&S.people.some(x=>x.id===el.value)){b.owner=el.value;b.locked=true;persist();setMsg('bills',`${b.name} is now paid by ${ownerName(b.owner)}.`,'good');render();}
   } else if(el.id==='dev-name'){
     const v=el.value.trim().slice(0,40);if(v){SY.device=v;sySave();}else el.value=SY.device||guessDevice();
+  } else if(el.id==='autoStrip'){
+    S.settings.autoStrip=el.checked;persist();
   } else if(el.id==='e-cat'){
     const w=$('#e-newwrap');if(w){w.hidden=el.value!=='__new';if(!w.hidden)$('#e-newcat').focus();}
   } else if(el.id==='fileCsv'){
