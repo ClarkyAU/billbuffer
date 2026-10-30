@@ -459,8 +459,18 @@ function seriesFields(arr,cad){
   arr=arr.slice().sort((a,b)=>a.d-b.d);
   const amts=arr.map(t=>t.a),mx=Math.max(...amts),mn=Math.min(...amts),spread=mx>0?(mx-mn)/mx:0;
   if(!cad){const g=[];for(let i=1;i<arr.length;i++)if(arr[i].d>arr[i-1].d)g.push(arr[i].d-arr[i-1].d);cad=g.length?cadFromGap(median(g)):'monthly';}
-  return {amount:Math.round(mx*100)/100,min:mn,max:mx,cadence:cad,anchor:toISO(arr[arr.length-1].d),
-    dom:Math.round(median(arr.map(t=>ymd(t.d)[2]))),variable:spread>.03,irregular:spread>.4,seen:arr.length,txs:arr.map(t=>({d:t.d,a:t.a}))};
+  // Banks move debits a day or two around weekends. Use the earliest day a bill has actually
+  // come out, so it is never counted after a payday it could land before.
+  const last=arr[arr.length-1].d;let anchor=last;
+  const step=cad==='weekly'?7:cad==='fortnightly'?14:0;
+  // Only a day or two earlier than the usual day counts; one-off late or early payments are ignored.
+  const earliest=(vals)=>{const m=Math.round(median(vals)),need=Math.max(1,Math.ceil(vals.length*.25));
+    return Math.min(m,...vals.filter(v=>v>=m-2&&v<=m&&vals.filter(x=>x===v).length>=need));};
+  if(step){const offs=arr.map(t=>{let o=((t.d-last)%step+step)%step;if(o>step/2)o-=step;return o;});anchor=last+earliest(offs);}
+  const doms=arr.map(t=>ymd(t.d)[2]);
+  const dom=Math.max(...doms)-Math.min(...doms)<=10?earliest(doms):Math.round(median(doms));
+  return {amount:Math.round(mx*100)/100,min:mn,max:mx,cadence:cad,anchor:toISO(anchor),
+    dom,variable:spread>.03,irregular:spread>.4,seen:arr.length,txs:arr.map(t=>({d:t.d,a:t.a}))};
 }
 function clusterBy(arr,val,close){
   const s=arr.slice().sort((x,y)=>val(x)-val(y));const out=[];let cur=[s[0]];
@@ -533,7 +543,8 @@ function redetect(){
   const fresh=[];
   found.forEach(f=>{
     const k=keptById.get(f.id);
-    if(k){Object.assign(k,{min:f.min,max:f.max,seen:f.seen,variable:f.variable,irregular:f.irregular,txs:f.txs,grp:f.grp});return;}
+    if(k){Object.assign(k,{min:f.min,max:f.max,seen:f.seen,variable:f.variable,irregular:f.irregular,txs:f.txs,grp:f.grp});
+      const lastTx=Math.max(...f.txs.map(x=>x.d));if(!k.userDates&&parseISO(k.anchor)<=lastTx)Object.assign(k,{anchor:f.anchor,dom:f.dom,cadence:f.cadence});return;}
     if(hidden.has(f.id)||handled.has(f.grp))return;
     const o=old.get(f.id),og=oldByGrp.get(f.grp),gc=guessCategory(f.name);
     if(o)f.include=o.include;
@@ -1258,6 +1269,9 @@ function saveBill(){
   const owner=$('#e-own').value;
   if(!S.people.some(x=>x.id===owner)){formError('Choose who pays this bill.');return;}
   const fields={owner,name,amount:Math.round(amt*100)/100,cadence:cad,anchor:date,dom:ymd(parseISO(date))[2],category:cat,include:inc,locked:true};
+  if(editing!=='new'){const b0=S.bills.find(x=>x.id===editing);if(b0){const nd0=nextDue(b0,today());
+    if(cad===b0.cadence&&nd0!=null&&date===toISO(nd0)){delete fields.anchor;delete fields.dom;}else fields.userDates=true;}}
+  else fields.userDates=true;
   if(editing==='new'){
     if(S.example)clearExampleData();
     S.bills.push(Object.assign({id:'m:'+Date.now().toString(36),src:'manual'},fields));
