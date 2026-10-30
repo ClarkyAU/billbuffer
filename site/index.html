@@ -259,6 +259,15 @@ details[open] .chev{transform:rotate(-135deg);margin-top:3px}
 .balrow .note{margin:0 0 10px}
 .linkbtn{background:none;border:0;padding:0;font:inherit;color:var(--accent);text-decoration:underline;cursor:pointer}
 @media (max-width:380px){.balrow{grid-template-columns:1fr}}
+.tempbox{margin-top:12px;padding:10px 12px;border:1px dashed var(--line);border-radius:10px}
+.tempbox .fields{margin-top:8px}
+.chlist{list-style:none;margin:6px 0 0;padding:0;font-size:14px}
+.chlist li{display:grid;grid-template-columns:auto minmax(0,1fr) 36px;gap:10px;align-items:center;padding:4px 0;border-top:1px dashed var(--line)}
+.chlist li:first-child{border-top:0}
+.chlist .a{font:600 14px var(--f-num)}
+.chlist li.ended{opacity:.5}
+.chlist .chnone{display:block;color:var(--muted);padding:4px 0}
+.brow .bamt small{display:block;font:500 11.5px var(--f-num);color:var(--muted);text-align:right}
 .quickown{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:center;margin:0 16px 12px;padding:8px 10px;border-radius:10px;background:var(--warn-soft);color:var(--warn);font-weight:600;font-size:14px}
 .quickown select{min-height:40px;background:var(--surface)}
 .txbox{margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)}
@@ -573,6 +582,24 @@ function occurrences(b,from,to){
 }
 const nextDue=(b,t)=>occurrences(b,t,t+800)[0];
 const annual=b=>b.amount*(PER_YEAR[b.cadence]||12);
+/* Amount changes. Each sets a new amount from a date, either until an end date (a change for
+   a set period) or from then on (a permanent change, like a rent increase). If changes overlap,
+   the one that started most recently applies. */
+function amtOn(b,d){
+  let a=b.amount,best=-Infinity;
+  (b.changes||[]).forEach(c=>{const f=parseISO(c.from),u=c.until?parseISO(c.until):null;
+    if(f!=null&&f<=d&&(u==null||d<=u)&&f>=best){best=f;a=c.amount;}});
+  return a;
+}
+const annualOn=(b,d)=>amtOn(b,d)*(PER_YEAR[b.cadence]||12);
+function changeNote(b,t){
+  const cs=(b.changes||[]).map(c=>({...c,f:parseISO(c.from),u:c.until?parseISO(c.until):null})).filter(c=>c.f!=null&&(c.u==null||c.u>=t)).sort((x,y)=>x.f-y.f);
+  const active=cs.filter(c=>c.f<=t&&c.u!=null).pop();
+  if(active)return `${f2(active.amount)} until ${fmtShort(active.u)}`;
+  const next=cs.find(c=>c.f>t);
+  if(next)return `${f2(next.amount)} from ${fmtShort(next.f)}${next.u!=null?' to '+fmtShort(next.u):''}`;
+  return '';
+}
 const balanceVal=()=>{const b=S.settings.balance;return (b===''||b==null||isNaN(+b))?null:+b;};
 
 /* ---------- double-ups ---------- */
@@ -606,28 +633,34 @@ function payDates(x,from,to){
 }
 function computePlan(){
   const t=today(),s=S.settings,buf=Math.max(0,+s.buffer||0),end=t+366,FN=365.25/14;
-  const act=S.bills.filter(b=>b.include&&b.amount>0);
+  const act=S.bills.filter(b=>b.include&&(b.amount>0||(b.changes||[]).length));
   const ids=new Set(S.categories.map(c=>c.id));
   const cat=new Map(S.categories.map(c=>[c.id,0]));
-  act.forEach(b=>{const c=ids.has(b.category)?b.category:'other';cat.set(c,(cat.get(c)||0)+annual(b)/FN);});
+  act.forEach(b=>{const c=ids.has(b.category)?b.category:'other';cat.set(c,(cat.get(c)||0)+annualOn(b,t)/FN);});
   const perFn=[...cat.values()].reduce((a,b)=>a+b,0);
   const catRows=S.categories.map(c=>({c,v:cat.get(c.id)||0})).filter(r=>r.v>0).sort((a,b)=>b.v-a.v);
   const ppl=S.people,pids=new Set(ppl.map(x=>x.id));
   const yr=new Map(ppl.map(x=>[x.id,0]));
   const unassigned=act.filter(b=>!pids.has(b.owner));
   act.forEach(b=>{if(pids.has(b.owner))yr.set(b.owner,yr.get(b.owner)+annual(b));});
+  // Each payday, a person puts in what their bills cost per pay, using the amount of each bill's
+  // next payment from that day. A planned change shows up in the pay-ins before it's due.
   const people=ppl.map(x=>{
-    const f=FREQ[x.freq]||FREQ.fortnightly,y=yr.get(x.id),perPay=y/f.per,sugg=Math.ceil(perPay-1e-9);
-    const custom=x.payIn!==''&&x.payIn!=null&&!isNaN(+x.payIn),payIn=custom?Math.max(0,+x.payIn):sugg,dates=payDates(x,t,end);
-    return {p:x,f,nBills:act.filter(b=>b.owner===x.id).length,perPay,sugg,custom,payIn,next:dates.length?dates[0]:null,dates};
+    const f=FREQ[x.freq]||FREQ.fortnightly,own=act.filter(b=>b.owner===x.id);
+    const perPayOn=d=>own.reduce((n,b)=>{const nd=nextDue(b,d);return n+(nd==null?annual(b):annualOn(b,nd));},0)/f.per;
+    const custom=x.payIn!==''&&x.payIn!=null&&!isNaN(+x.payIn),dates=payDates(x,t,end);
+    const amtFor=d=>custom?Math.max(0,+x.payIn):Math.max(0,Math.ceil(perPayOn(d)-1e-9));
+    const next=dates.length?dates[0]:null,perPay=perPayOn(next!=null?next:t),sugg=Math.ceil(perPay-1e-9),payIn=amtFor(next!=null?next:t);
+    let nextChange=null;for(const d of dates){if(d>t+120)break;const a=amtFor(d);if(a!==payIn){nextChange={d,amt:a};break;}}
+    return {p:x,f,nBills:own.length,perPay,sugg,custom,payIn,amtFor,next,dates,nextChange};
   });
   const missing=people.filter(r=>r.next==null).map(r=>r.p.name);
   const ev=[];
   // A pay-in due today should already be in the account, so it's part of today's balance
   // rather than money still on its way.
   const todayPays=[];
-  people.forEach(r=>r.dates.forEach(d=>{const e={d,pay:true,amt:r.payIn,person:r.p,today:d===t};ev.push(e);if(e.today&&r.payIn>0)todayPays.push(e);}));
-  act.forEach(bl=>occurrences(bl,t,end).forEach(d=>ev.push({d,bl,amt:bl.amount})));
+  people.forEach(r=>r.dates.forEach(d=>{const e={d,pay:true,amt:r.amtFor(d),person:r.p,today:d===t};ev.push(e);if(e.today&&e.amt>0)todayPays.push(e);}));
+  act.forEach(bl=>occurrences(bl,t,end).forEach(d=>ev.push({d,bl,amt:amtOn(bl,d)})));
   ev.sort((a,b)=>a.d-b.d||(a.pay&&!b.pay?-1:b.pay&&!a.pay?1:b.amt-a.amt));
   // "Right now" covers this pay run and the next one, for everyone: every bill that lands
   // before the end of each person's next pay run, counting the pay-ins that arrive before then.
@@ -712,6 +745,8 @@ function cleanState(st,keepExample){
   d.bills=(Array.isArray(st.bills)?st.bills:[]).filter(b=>b&&str(b.id)&&str(b.name)&&num(b.amount)&&PER_YEAR[b.cadence]&&parseISO(b.anchor)!=null)
     .map(b=>{const g=guessCategory(b.name);return Object.assign({},b,{
       include:!!b.include,dom:num(b.dom)?b.dom:ymd(parseISO(b.anchor))[2],src:b.src==='auto'?'auto':'manual',
+      changes:(Array.isArray(b.changes)?b.changes:[]).filter(c=>c&&num(+c.amount)&&+c.amount>=0&&parseISO(c.from)!=null&&(!c.until||(parseISO(c.until)!=null&&parseISO(c.until)>=parseISO(c.from))))
+        .map(c=>({id:str(c.id)?c.id:'c'+Math.random().toString(36).slice(2,8),amount:+c.amount,from:c.from,until:c.until||null})),
       txs:Array.isArray(b.txs)?b.txs.filter(t=>t&&num(t.d)&&num(t.a)).map(t=>({d:t.d,a:t.a})):[],grp:str(b.grp)?b.grp:(grpOf(b)||undefined),
       locked:!!(b.locked||b.edited||b.src!=='auto'),owner:pids.has(b.owner)?b.owner:'',category:ids.has(b.category)?b.category:(ids.has(g)?g:'other')});});
   d.hidden=(Array.isArray(st.hidden)?st.hidden:[]).filter(str);
@@ -788,7 +823,7 @@ function heroHtml(P){
   }
   P.people.forEach(r=>{
     const isToday=r.next===P.t;
-    rows+=`<button class="hrow hbtn" data-act="ownerBills" data-id="${esc(r.p.id)}" aria-label="See ${esc(poss(r.p.name))} bills"><div class="l">${esc(r.p.name)}<small>Puts in ${esc(r.f.label.toLowerCase())}${isToday?' · <strong>payday today</strong>, counted in the figure above':r.next!=null?' · next '+esc(fmtDay(r.next)):' · no payday set'} · ${plural(r.nBills,'bill')}</small></div><div class="v">${f0(r.payIn)}<span class="harrow" aria-hidden="true">›</span></div></button>`;
+    rows+=`<button class="hrow hbtn" data-act="ownerBills" data-id="${esc(r.p.id)}" aria-label="See ${esc(poss(r.p.name))} bills"><div class="l">${esc(r.p.name)}<small>Puts in ${esc(r.f.label.toLowerCase())}${isToday?' · <strong>payday today</strong>, counted in the figure above':r.next!=null?' · next '+esc(fmtDay(r.next)):' · no payday set'} · ${plural(r.nBills,'bill')}${r.nextChange?` · ${f0(r.nextChange.amt)} from ${esc(fmtShort(r.nextChange.d))}`:''}</small></div><div class="v">${f0(r.payIn)}<span class="harrow" aria-hidden="true">›</span></div></button>`;
   });
   const nb=P.working.filter(w=>!w.e.pay),np=P.working.filter(w=>w.e.pay);
   const low=P.working.reduce((m,w)=>Math.min(m,w.bal),P.required);
@@ -905,7 +940,17 @@ function viewCalendar(){
 }
 
 /* ---------- Bills tab ---------- */
+let editChanges=[],editChangesFor=null;
+function changesListHtml(){
+  const t=today();
+  if(!editChanges.length)return '<li class="chnone">No changes planned.</li>';
+  return editChanges.slice().sort((x,y)=>parseISO(x.from)-parseISO(y.from)).map(c=>{
+    const f=parseISO(c.from),u=c.until?parseISO(c.until):null,ended=u!=null&&u<t;
+    return `<li class="${ended?'ended':''}"><span class="a">${f2(c.amount)}</span><span>${u!=null?`${esc(fmtShort(f))} to ${esc(fmtLong(u))}`:`from ${esc(fmtLong(f))} on`}${ended?' · ended':f<=t?' · now':''}</span><button class="x" data-act="chDel" data-id="${esc(c.id)}" aria-label="Remove this change">×</button></li>`;}).join('');
+}
 function editorHtml(b){
+  const key=b?b.id:'new';
+  if(editChangesFor!==key){editChangesFor=key;editChanges=b&&Array.isArray(b.changes)?b.changes.map(c=>({...c})):[];}
   const t=today();const nd=b?nextDue(b,t):null;
   const date=b?(nd!=null?toISO(nd):b.anchor):'';
   const cat=b?catOf(b.category).id:(catFilter!=='all'?catFilter:'other');
@@ -927,7 +972,18 @@ function editorHtml(b){
     <div class="field wide"><label for="e-own">Who pays</label><select id="e-own">${b&&S.people.some(x=>x.id===b.owner)?'':'<option value="" selected>Choose who pays</option>'}${S.people.map(x=>`<option value="${esc(x.id)}" ${b&&b.owner===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select></div>
     <div class="field wide" id="e-newwrap" hidden><label for="e-newcat">New category name</label><input id="e-newcat" type="text" maxlength="40" placeholder="Sam's bills"></div>
   </div>
-  <label class="check"><input type="checkbox" id="e-inc" ${!b||b.include?'checked':''}> Count this bill in the plan</label>${src}
+  <label class="check"><input type="checkbox" id="e-inc" ${!b||b.include?'checked':''}> Count this bill in the plan</label>
+  <div class="tempbox"><p class="flabel">Amount changes</p>
+    <ul class="chlist" id="e-chlist">${changesListHtml()}</ul>
+    <div class="fields">
+      <div class="field"><label for="c-amt">New amount ($)</label><input id="c-amt" type="number" inputmode="decimal" min="0" step="0.01"></div>
+      <div class="field"><label for="c-from">From</label><input id="c-from" type="date" value="${esc(toISO(today()))}"></div>
+      <div class="field wide"><label for="c-until">Until (leave empty if it's permanent)</label><input id="c-until" type="date"></div>
+    </div>
+    <div class="btnrow"><button class="btn small ghost" data-act="chAdd">Add change</button></div>
+    <div id="e-chmsg"></div>
+    <p class="note">For a set period, add an end date and the usual amount comes back after it. For something like a rent increase, leave the end date empty. Changes are kept when you tap Save.</p>
+  </div>${src}
   <div class="btnrow"><button class="btn" data-act="saveBill">${b?'Save':'Add bill'}</button><button class="btn ghost" data-act="cancelEdit">Cancel</button>
   ${b?`<button class="btn danger" data-act="delBill" data-id="${esc(b.id)}">${confirmDel===b.id?'Tap again to delete':'Delete'}</button>`:''}</div>${msgHtml('editor')}</div>`;
 }
@@ -949,6 +1005,8 @@ function viewBills(){
     const dp=dups.get(b.id);const open=editing===b.id;
     let pills='';
     if(!b.include)pills+=' <span class="pill off">Off</span>';
+    const cn=changeNote(b,t),cur=amtOn(b,t);
+    if(cn)pills+=` <span class="pill acc">${esc(cn)}</span>`;
     if(!S.people.some(x=>x.id===b.owner))pills+=' <span class="pill warn">No owner</span>';
     if(dp)pills+=' <span class="pill warn">Double-up?</span>';
     if(b.irregular)pills+=' <span class="pill warn">Irregular</span>';
@@ -956,7 +1014,7 @@ function viewBills(){
     return `<li class="${b.include?'':'off'} ${open?'open':''}"><button class="brow" data-act="edit" data-id="${esc(b.id)}" aria-expanded="${open}">
       <span class="dot" style="${cc(b.category)}"></span>
       <span><span class="bn">${esc(b.name)}</span><span class="bs">${S.people.some(x=>x.id===b.owner)?esc(ownerName(b.owner))+' · ':''}${esc(catOf(b.category).name)} · ${esc(cadLabel(b))}${nd!=null?' · next '+esc(fmtDay(nd)):''}${pills}</span></span>
-      <span class="bamt">${f2(b.amount)}</span><span class="chev"></span></button>
+      <span class="bamt">${f2(cur)}${Math.abs(cur-b.amount)>0.004?`<small>usually ${f2(b.amount)}</small>`:''}</span><span class="chev"></span></button>
       ${S.people.some(x=>x.id===b.owner)||open?'':`<div class="quickown"><label for="qo-${esc(b.id)}">Who pays this?</label><select id="qo-${esc(b.id)}" data-qown="${esc(b.id)}"><option value="">Choose…</option>${S.people.map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('')}</select></div>`}
       ${dp?`<div class="dup"><p>Looks like a double-up of <strong>${esc(dp.other.name)}</strong>: ${esc(dp.why)}.</p><div class="btnrow"><button class="btn small ghost" data-act="dupKeep" data-key="${esc(dp.key)}">Not a double-up</button><button class="btn small danger" data-act="delBill" data-id="${esc(b.id)}">${confirmDel===b.id?'Tap again to remove':'Remove this one'}</button></div></div>`:''}
       ${open?editorHtml(b):''}</li>`;
@@ -1268,7 +1326,7 @@ function saveBill(){
   if(cat==='__new'){cat=newCategory($('#e-newcat').value);if(!cat){formError('Type a name for the new category.');return;}}
   const owner=$('#e-own').value;
   if(!S.people.some(x=>x.id===owner)){formError('Choose who pays this bill.');return;}
-  const fields={owner,name,amount:Math.round(amt*100)/100,cadence:cad,anchor:date,dom:ymd(parseISO(date))[2],category:cat,include:inc,locked:true};
+  const fields={owner,changes:editChanges.map(c=>({...c})),name,amount:Math.round(amt*100)/100,cadence:cad,anchor:date,dom:ymd(parseISO(date))[2],category:cat,include:inc,locked:true};
   if(editing!=='new'){const b0=S.bills.find(x=>x.id===editing);if(b0){const nd0=nextDue(b0,today());
     if(cad===b0.cadence&&nd0!=null&&date===toISO(nd0)){delete fields.anchor;delete fields.dom;}else fields.userDates=true;}}
   else fields.userDates=true;
@@ -1280,7 +1338,7 @@ function saveBill(){
     const b=S.bills.find(x=>x.id===editing);if(b)Object.assign(b,fields);
     setMsg('bills',`Saved ${name}.`,'good');
   }
-  editing=null;confirmDel=null;persist();render();
+  editing=null;confirmDel=null;editChangesFor=null;persist();render();
 }
 function splitTx(){
   const b=S.bills.find(x=>x.id===editing);if(!b||!Array.isArray(b.txs))return;
@@ -1359,8 +1417,19 @@ document.addEventListener('click',async e=>{
   else if(a==='clearExample'){clearExampleData();persist();render();}
   else if(a==='edit'){const id=el.dataset.id;editing=editing===id?null:id;msg=null;render();}
   else if(a==='new'){editing='new';msg=null;render();const n=$('#e-name');if(n)n.focus();}
-  else if(a==='cancelEdit'){editing=null;msg=null;render();}
+  else if(a==='cancelEdit'){editing=null;editChangesFor=null;msg=null;render();}
   else if(a==='saveBill')saveBill();
+  else if(a==='chAdd'){
+    const am=parseFloat($('#c-amt').value),fr=$('#c-from').value,un=$('#c-until').value;
+    const err=m=>{const x=$('#e-chmsg');if(x)x.innerHTML=`<div class="msg bad" role="status">${esc(m)}</div>`;};
+    if(!(am>=0))return err('Enter the new amount.');
+    if(parseISO(fr)==null)return err('Enter the date the change starts.');
+    if(un&&parseISO(un)<parseISO(fr))return err('The end date is before the start date.');
+    if(un&&parseISO(un)<today())return err('That end date has already passed.');
+    editChanges.push({id:'c'+Date.now().toString(36),amount:Math.round(am*100)/100,from:fr,until:un||null});
+    $('#e-chlist').innerHTML=changesListHtml();$('#c-amt').value='';$('#c-until').value='';$('#e-chmsg').innerHTML='';
+  }
+  else if(a==='chDel'){editChanges=editChanges.filter(c=>c.id!==el.dataset.id);const l=$('#e-chlist');if(l)l.innerHTML=changesListHtml();}
   else if(a==='dismissNotice'){Sync.notice='';render();}
   else if(a==='retry'){if(serverVersion===0&&!Sync.lastOk){Sync.mode='loading';render();boot();}else pullNow();}
   else if(a==='signOut'){try{await api('POST','logout',{});}catch(e){}signedOut();}
