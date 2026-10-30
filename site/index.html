@@ -204,6 +204,22 @@ details[open] .chev{transform:rotate(-135deg);margin-top:3px}
 .pct{position:relative;display:block}
 .pct input{padding-right:26px}
 .pct i{position:absolute;right:10px;top:50%;transform:translateY(-50%);font:500 14px var(--f-num);font-style:normal;color:var(--muted);pointer-events:none}
+.blist>li.grp{background:none}
+.ghead{display:grid;gap:2px;padding:12px 16px 4px}
+.gname{font:700 12px var(--f-num);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.gmeta{font-size:12.5px;color:var(--muted)}
+.blist.sub{margin:0 0 6px 16px;border-left:2px solid var(--line)}
+.blist.sub>li{border-top:1px dashed var(--line)}
+.blist.sub>li:first-child{border-top:0}
+.quickown{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:center;margin:0 16px 12px;padding:8px 10px;border-radius:10px;background:var(--warn-soft);color:var(--warn);font-weight:600;font-size:14px}
+.quickown select{min-height:40px;background:var(--surface)}
+.txbox{margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)}
+.txlist{list-style:none;margin:8px 0 0;padding:0;max-height:260px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.txlist li+li{border-top:1px solid var(--line)}
+.txlist label{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 10px;cursor:pointer}
+.txlist input{width:20px;height:20px;margin:0;accent-color:var(--accent)}
+.txlist .d{font:500 13px var(--f-num);color:var(--muted)}
+.txlist .a{font:600 14px var(--f-num);font-variant-numeric:tabular-nums}
 .rlist{list-style:none;margin:8px 0 0;padding:0}
 .rlist li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 0;border-top:1px dashed var(--line)}
 .rlist li:first-child{border-top:0}
@@ -364,42 +380,95 @@ function norm(s){
   return w.slice(0,3).join(' ');
 }
 const titleCase=s=>s.toLowerCase().replace(/\b\w/g,c=>c.toUpperCase());
+const monthKey=d=>{const [y,m]=ymd(d);return y*12+m;};
+const ordn=n=>{const v=n%100;if(v>=11&&v<=13)return n+'th';return n+(({1:'st',2:'nd',3:'rd'})[n%10]||'th');};
+function cadFromGap(med){return med<=9?'weekly':med<=17?'fortnightly':med<=45?'monthly':med<=120?'quarterly':'yearly';}
+function mkSeries(arr){
+  if(arr.length<2)return null;
+  const gaps=[];for(let i=1;i<arr.length;i++){const x=arr[i].d-arr[i-1].d;if(x>0)gaps.push(x);}
+  if(!gaps.length)return null;
+  const med=median(gaps);let cad=null;
+  if(med>=6&&med<=8)cad='weekly';else if(med>=12&&med<=16)cad='fortnightly';else if(med>=26&&med<=35)cad='monthly';
+  if(!cad)return null;
+  return {cad,ok:gaps.filter(x=>Math.abs(x-med)<=Math.max(2,med*.2)).length/gaps.length};
+}
+/* Turns a set of payments into a bill's numbers: amount (highest), timing, spread. */
+function seriesFields(arr,cad){
+  arr=arr.slice().sort((a,b)=>a.d-b.d);
+  const amts=arr.map(t=>t.a),mx=Math.max(...amts),mn=Math.min(...amts),spread=mx>0?(mx-mn)/mx:0;
+  if(!cad){const g=[];for(let i=1;i<arr.length;i++)if(arr[i].d>arr[i-1].d)g.push(arr[i].d-arr[i-1].d);cad=g.length?cadFromGap(median(g)):'monthly';}
+  return {amount:Math.round(mx*100)/100,min:mn,max:mx,cadence:cad,anchor:toISO(arr[arr.length-1].d),
+    dom:Math.round(median(arr.map(t=>ymd(t.d)[2]))),variable:spread>.03,irregular:spread>.4,seen:arr.length,txs:arr.map(t=>({d:t.d,a:t.a}))};
+}
+function clusterBy(arr,val,close){
+  const s=arr.slice().sort((x,y)=>val(x)-val(y));const out=[];let cur=[s[0]];
+  for(let i=1;i<s.length;i++){if(close(val(s[i-1]),val(s[i])))cur.push(s[i]);else{out.push(cur);cur=[s[i]];}}
+  out.push(cur);return out.map(c=>c.sort((x,y)=>x.d-y.d));
+}
+function autoBill(key,suffix,label,arr,cad,extra){
+  const f=seriesFields(arr,cad);
+  return Object.assign({id:'d:'+key+(suffix?'|'+suffix:''),grp:key,name:titleCase(key)+(label?' · '+label:''),src:'auto',include:suffix?true:!f.irregular},f,extra||{});
+}
 function detect(txns){
   const g={};
   txns.forEach(t=>{const k=norm(t.t);if(k&&!SKIP.test(k))(g[k]=g[k]||[]).push(t);});
   const out=[];
   for(const k in g){
     const arr=g[k].slice().sort((a,b)=>a.d-b.d);if(arr.length<2)continue;
-    const gaps=[];for(let i=1;i<arr.length;i++){const x=arr[i].d-arr[i-1].d;if(x>0)gaps.push(x);}
-    if(!gaps.length)continue;
-    const med=median(gaps);let cad=null;
-    if(med>=6&&med<=8)cad='weekly';else if(med>=12&&med<=16)cad='fortnightly';else if(med>=26&&med<=35)cad='monthly';
-    if(!cad)continue;
-    const ok=gaps.filter(x=>Math.abs(x-med)<=Math.max(2,med*.2)).length/gaps.length;if(ok<.6)continue;
-    const amts=arr.map(t=>t.a);const mx=Math.max(...amts),mn=Math.min(...amts);
-    const spread=(mx-mn)/mx;
-    out.push({id:'d:'+k,name:titleCase(k),amount:Math.round(mx*100)/100,min:mn,max:mx,cadence:cad,
-      anchor:toISO(arr[arr.length-1].d),dom:Math.round(median(arr.map(t=>ymd(t.d)[2]))),
-      variable:spread>.03,include:spread<=.4,irregular:spread>.4,src:'auto',seen:arr.length});
+    const span=arr[arr.length-1].d-arr[0].d+1,months=new Set(arr.map(t=>monthKey(t.d))).size;
+    const perMonth=arr.length/Math.max(1,span/30.44);
+    const amts=arr.map(t=>t.a),spread=(Math.max(...amts)-Math.min(...amts))/Math.max(...amts);
+    const whole=mkSeries(arr);
+    const gapsAll=[];for(let i=1;i<arr.length;i++)gapsAll.push(arr[i].d-arr[i-1].d);
+    const exact=whole&&(whole.cad==='weekly'||whole.cad==='fortnightly')&&gapsAll.every(x=>Math.abs(x-(whole.cad==='weekly'?7:14))<=1);
+    const byDay=perMonth>=1.5&&!exact?clusterBy(arr,t=>ymd(t.d)[2],(a,b)=>b-a<=3).filter(c=>{const ms=new Set(c.map(t=>monthKey(t.d))).size;return c.length>=2&&ms>=2&&ms>=c.length*.8;}):[];
+    const covDay=byDay.reduce((n,c)=>n+c.length,0)/arr.length;
+    // 0. payments that land on set days each month (1st and 15th, or the 5th and 19th)
+    if(byDay.length>=2&&covDay>=.7){byDay.forEach(c=>{const dm=Math.round(median(c.map(t=>ymd(t.d)[2])));out.push(autoBill(k,'d'+dm,'around the '+ordn(dm),c,'monthly'));});continue;}
+    // 1. one clean bill: same amount, regular timing
+    if(whole&&whole.ok>=.8&&spread<=.03){out.push(autoBill(k,'','',arr,whole.cad));continue;}
+    // 2. several bills told apart by amount (e.g. $250 and $180 each month)
+    const byAmt=clusterBy(arr,t=>t.a,(a,b)=>b-a<=Math.max(2,a*.08)).map(c=>({c,s:mkSeries(c)})).filter(x=>x.s&&x.s.ok>=.6);
+    const covAmt=byAmt.reduce((n,x)=>n+x.c.length,0)/arr.length;
+    if(byAmt.length>=2&&covAmt>=.7){byAmt.forEach(x=>{const m=Math.round(median(x.c.map(t=>t.a)));out.push(autoBill(k,'a'+m,'$'+m,x.c,x.s.cad));});continue;}
+    // 4. one bill with amounts that move around (e.g. electricity)
+    if(whole&&whole.ok>=.6&&perMonth<1.5){out.push(autoBill(k,'','',arr,whole.cad));continue;}
+    // 5. one regular bill plus the odd extra payment
+    if(byAmt.length>=1&&covAmt>=.5){byAmt.forEach(x=>{const m=Math.round(median(x.c.map(t=>t.a)));out.push(autoBill(k,'a'+m,'$'+m,x.c,x.s.cad));});continue;}
+    // 6. lots of payments that don't line up: budget the biggest monthly total
+    if(perMonth>=1.5&&months>=2){
+      const tot=new Map();arr.forEach(t=>{const m=monthKey(t.d);tot.set(m,(tot.get(m)||0)+t.a);});
+      const mx=Math.max(...tot.values());
+      out.push(autoBill(k,'total','monthly total',arr,'monthly',{amount:Math.round(mx*100)/100,dom:ymd(arr[arr.length-1].d)[2],variable:true,irregular:true,include:true,total:true}));
+      continue;
+    }
+    if(whole&&whole.ok>=.6)out.push(autoBill(k,'','',arr,whole.cad));
   }
   return out;
 }
+const grpOf=b=>b.grp||(String(b.id).startsWith('d:')?String(b.id).slice(2).split('|')[0]:null);
 function redetect(){
   const found=detect(S.txns);
   const ids=new Set(S.categories.map(c=>c.id));
   const kept=S.bills.filter(b=>b.src!=='auto'||b.locked);
   const keptById=new Map(kept.map(b=>[b.id,b]));
   const old=new Map(S.bills.filter(b=>b.src==='auto').map(b=>[b.id,b]));
+  const oldByGrp=new Map();S.bills.forEach(b=>{const g=grpOf(b);if(g&&!oldByGrp.has(g))oldByGrp.set(g,b);});
   const hidden=new Set(S.hidden);
+  // a payee you've split by hand, or kept as one edited bill, isn't re-split automatically
+  const handled=new Set();
+  kept.forEach(b=>{const g=grpOf(b);if(g&&(b.src==='manual'||b.id==='d:'+g))handled.add(g);});
+  S.hidden.forEach(id=>{if(id.startsWith('d:')&&!id.includes('|'))handled.add(id.slice(2));});
   const fresh=[];
   found.forEach(f=>{
     const k=keptById.get(f.id);
-    if(k){Object.assign(k,{min:f.min,max:f.max,seen:f.seen,variable:f.variable,irregular:f.irregular});return;}
-    if(hidden.has(f.id))return;
-    const o=old.get(f.id);const g=guessCategory(f.name);
-    f.include=o?o.include:f.include;
-    f.owner=o&&o.owner?o.owner:'';
-    f.category=o&&ids.has(o.category)?o.category:(ids.has(g)?g:'other');
+    if(k){Object.assign(k,{min:f.min,max:f.max,seen:f.seen,variable:f.variable,irregular:f.irregular,txs:f.txs,grp:f.grp});return;}
+    if(hidden.has(f.id)||handled.has(f.grp))return;
+    const o=old.get(f.id),og=oldByGrp.get(f.grp),gc=guessCategory(f.name);
+    if(o)f.include=o.include;
+    f.owner=(o&&o.owner)||'';
+    const oc=(o&&o.category)||(og&&og.category);
+    f.category=oc&&ids.has(oc)?oc:(ids.has(gc)?gc:'other');
     fresh.push(f);
   });
   S.bills=fresh.concat(kept);
@@ -433,6 +502,7 @@ function findDups(t){
   const key=(a,b)=>[a.id,b.id].sort().join('~');
   for(let i=0;i<act.length;i++)for(let j=i+1;j<act.length;j++){
     const a=act[i],b=act[j],k=key(a,b);if(skip.has(k))continue;
+    if(grpOf(a)&&grpOf(a)===grpOf(b))continue;
     const hi=Math.max(a.amount,b.amount);
     const sameAmt=Math.abs(a.amount-b.amount)<=Math.max(1,hi*.03);
     const da=nd.get(a.id),db=nd.get(b.id);const near=da!=null&&db!=null&&Math.abs(da-db)<=4;
@@ -500,8 +570,7 @@ function exampleTxns(t){
     if(d<t&&d>=t-95)out.push({d,t:m[0],a:Array.isArray(m[1])?m[1][k+3]:m[1]});
   });
   for(let d=t-3;d>=t-95;d-=14)out.push({d,t:'FITNESS FIRST MEMBERSHIP',a:18.95});
-  const gaps=[3,4,2,5,3,6,2,4,3,5,2,4,3,4,2,5,3,4,2,6,3,4,5,3,2,4,3];let d=t-92,i=0;
-  while(d<t){out.push({d,t:'WOOLWORTHS SUPERMARKET',a:25+((i*37)%90)});d+=gaps[i%gaps.length];i++;}
+  for(let k=-3;k<=0;k++){[[1,250],[16,180]].forEach(([dm,a])=>{const x=addMonths(D(ty,tm,1),k,dm);if(x<t&&x>=t-95)out.push({d:x,t:'WESTPAC LOAN REPAYMENT',a});});}
   return out;
 }
 function buildExample(){
@@ -512,7 +581,7 @@ function buildExample(){
   {const [yy,mm]=ymd(t);let d15=D(yy,mm,15);if(d15<t)d15=addMonths(d15,1,15);s.people[1].nextPayday=toISO(d15);s.people[1].freq='monthly';}
   const prev=S;S=s;redetect();S=prev;
   const [y,m]=ymd(t);let d18=D(y,m,18);if(d18<t)d18=addMonths(d18,1,18);
-  s.bills.forEach(b=>{b.owner=/TELSTRA|RENT|MEDIBANK/i.test(b.name)?'p1':'p2';});
+  s.bills.forEach(b=>{b.owner=/TELSTRA|RENT|MEDIBANK|WESTPAC/i.test(b.name)?'p1':'p2';if(/WESTPAC/i.test(b.name))b.category='housing';});
   s.bills.push({id:'m:example-rego',name:'Car rego',amount:890,cadence:'yearly',anchor:toISO(t+40),dom:ymd(t+40)[2],include:true,src:'manual',locked:true,category:'insurance',owner:'p2'});
   s.bills.push({id:'m:example-phone',name:'Phone plan',amount:65,cadence:'monthly',anchor:toISO(d18),dom:18,include:true,src:'manual',locked:true,category:'utilities',owner:'p1'});
   return s;
@@ -544,6 +613,7 @@ function cleanState(st,keepExample){
   d.bills=(Array.isArray(st.bills)?st.bills:[]).filter(b=>b&&str(b.id)&&str(b.name)&&num(b.amount)&&PER_YEAR[b.cadence]&&parseISO(b.anchor)!=null)
     .map(b=>{const g=guessCategory(b.name);return Object.assign({},b,{
       include:!!b.include,dom:num(b.dom)?b.dom:ymd(parseISO(b.anchor))[2],src:b.src==='auto'?'auto':'manual',
+      txs:Array.isArray(b.txs)?b.txs.filter(t=>t&&num(t.d)&&num(t.a)).map(t=>({d:t.d,a:t.a})):[],grp:str(b.grp)?b.grp:(grpOf(b)||undefined),
       locked:!!(b.locked||b.edited||b.src!=='auto'),owner:pids.has(b.owner)?b.owner:'',category:ids.has(b.category)?b.category:(ids.has(g)?g:'other')});});
   d.hidden=(Array.isArray(st.hidden)?st.hidden:[]).filter(str);
   d.notDup=(Array.isArray(st.notDup)?st.notDup:[]).filter(str);
@@ -592,7 +662,7 @@ const ownerName=id=>{const x=S.people.find(q=>q.id===id);return x?x.name:'No own
 
 /* ---------- view state ---------- */
 let tab='now',msg=null,pendingRestore=null,confirmReset=null,dl=null,clearTimer=null;
-let editing=null,confirmDel=null,catFilter='all',confirmCat=null,ownFilter='all',confirmPerson=null,editingP=null;
+let confirmRecheck=null,editing=null,confirmDel=null,catFilter='all',confirmCat=null,ownFilter='all',confirmPerson=null,editingP=null;
 let calY=null,calM=null,selDay=null;
 const openSeg=new Set();
 const $=s=>document.querySelector(s);
@@ -742,7 +812,13 @@ function editorHtml(b){
   const cat=b?catOf(b.category).id:(catFilter!=='all'?catFilter:'other');
   const opts=S.categories.map(c=>`<option value="${esc(c.id)}" ${c.id===cat?'selected':''}>${esc(c.name)}</option>`).join('')+'<option value="__new">New category…</option>';
   const cads=CADS.map(([v,l])=>`<option value="${v}" ${(b?b.cadence:'monthly')===v?'selected':''}>${l}</option>`).join('');
-  const src=b&&b.src==='auto'?`<p class="note">Found in your statements${b.seen?', '+plural(b.seen,'payment'):''}${b.variable?`, from ${f2(b.min)} to ${f2(b.max)}`:''}.</p>`:'';
+  const txs=b&&Array.isArray(b.txs)?b.txs.slice().sort((x,y)=>y.d-x.d):[];
+  const src=txs.length?`<div class="txbox"><p class="flabel">Payments found in statements (${txs.length})</p>
+    ${b.total?`<p class="note" style="margin-top:4px">These don't follow one pattern, so the amount is the biggest month's total. Split them if some are separate bills.</p>`:b.variable?`<p class="note" style="margin-top:4px">From ${f2(b.min)} to ${f2(b.max)}. The amount uses the highest.</p>`:''}
+    <ul class="txlist">${txs.map((x,i)=>`<li><label for="tx-${i}"><input type="checkbox" id="tx-${i}" data-tx="${x.d}|${x.a}"><span class="d">${esc(fmtDay(x.d))}</span><span class="a">${f2(x.a)}</span></label></li>`).join('')}</ul>
+    <p class="note">Tick payments that are really a different bill, then split them off.</p>
+    <div class="btnrow"><button class="btn small ghost" data-act="splitTx">Split ticked into a new bill</button>${b.grp?`<button class="btn small ghost" data-act="recheck">${confirmRecheck===b.id?'Tap again to re-check':'Re-check this payee'}</button>`:''}</div></div>`
+    :(b&&b.src==='auto'?`<p class="note">Found in your statements${b.seen?', '+plural(b.seen,'payment'):''}.</p>`:'');
   return `<div class="editor"><div class="fields">
     <div class="field wide"><label for="e-name">Name</label><input id="e-name" type="text" maxlength="60" value="${esc(b?b.name:'')}" placeholder="Electricity"></div>
     <div class="field"><label for="e-amt">Amount ($)</label><input id="e-amt" type="number" inputmode="decimal" min="0" step="0.01" value="${b?b.amount:''}"></div>
@@ -770,7 +846,7 @@ function viewBills(){
   const rows=S.bills.filter(b=>(catFilter==='all'||catOf(b.category).id===catFilter)&&(ownFilter==='all'||ownKey(b)===ownFilter))
     .map(b=>({b,nd:nextDue(b,t)})).sort((x,y)=>(x.b.include===y.b.include?0:x.b.include?-1:1)||((x.nd==null?1e9:x.nd)-(y.nd==null?1e9:y.nd)));
   const dupCount=new Set([...dups.values()].map(v=>v.key)).size;
-  const list=rows.length?rows.map(({b,nd})=>{
+  const rowHtml=({b,nd})=>{
     const dp=dups.get(b.id);const open=editing===b.id;
     let pills='';
     if(!b.include)pills+=' <span class="pill off">Off</span>';
@@ -782,8 +858,22 @@ function viewBills(){
       <span class="dot" style="${cc(b.category)}"></span>
       <span><span class="bn">${esc(b.name)}</span><span class="bs">${S.people.some(x=>x.id===b.owner)?esc(ownerName(b.owner))+' · ':''}${esc(catOf(b.category).name)} · ${esc(cadLabel(b))}${nd!=null?' · next '+esc(fmtDay(nd)):''}${pills}</span></span>
       <span class="bamt">${f2(b.amount)}</span><span class="chev"></span></button>
+      ${S.people.some(x=>x.id===b.owner)||open?'':`<div class="quickown"><label for="qo-${esc(b.id)}">Who pays this?</label><select id="qo-${esc(b.id)}" data-qown="${esc(b.id)}"><option value="">Choose…</option>${S.people.map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('')}</select></div>`}
       ${dp?`<div class="dup"><p>Looks like a double-up of <strong>${esc(dp.other.name)}</strong>: ${esc(dp.why)}.</p><div class="btnrow"><button class="btn small ghost" data-act="dupKeep" data-key="${esc(dp.key)}">Not a double-up</button><button class="btn small danger" data-act="delBill" data-id="${esc(b.id)}">${confirmDel===b.id?'Tap again to remove':'Remove this one'}</button></div></div>`:''}
       ${open?editorHtml(b):''}</li>`;
+  };
+  // bills from the same payee sit under one heading; each keeps its own owner
+  const grpSize=new Map();S.bills.forEach(b=>{const g=grpOf(b);if(g)grpSize.set(g,(grpSize.get(g)||0)+1);});
+  const blocks=[],seenG=new Map();
+  rows.forEach(r=>{const g=grpOf(r.b);
+    if(g&&grpSize.get(g)>=2){if(!seenG.has(g)){const blk={g,rows:[]};seenG.set(g,blk);blocks.push(blk);}seenG.get(g).rows.push(r);}
+    else blocks.push({rows:[r]});});
+  const list=rows.length?blocks.map(blk=>{
+    if(!blk.g)return rowHtml(blk.rows[0]);
+    const all=S.bills.filter(b=>grpOf(b)===blk.g&&b.include);
+    const perMonth=all.reduce((n,b)=>n+annual(b)/12,0);
+    const owners=[...new Set(all.map(b=>ownerName(b.owner)))];
+    return `<li class="grp"><div class="ghead"><span class="gname">${esc(titleCase(blk.g))}</span><span class="gmeta">${plural(grpSize.get(blk.g),'bill')} · about ${f2(perMonth)} a month · ${esc(owners.join(', ')||'No owner')}</span></div><ul class="blist sub">${blk.rows.map(rowHtml).join('')}</ul></li>`;
   }).join(''):`<li class="empty">${S.bills.length?'No bills match these filters.':'No bills yet. Import statements or add one.'}</li>`;
   const cats=S.categories.map(c=>`<li style="${cc(c.id)}"><button class="swatch" data-act="catColor" data-id="${esc(c.id)}" aria-label="Change colour for ${esc(c.name)}"></button>
     <input type="text" id="cat-${esc(c.id)}" data-cat="${esc(c.id)}" maxlength="40" value="${esc(c.name)}" aria-label="Category name">
@@ -906,6 +996,31 @@ function saveBill(){
   }
   editing=null;confirmDel=null;persist();render();
 }
+function splitTx(){
+  const b=S.bills.find(x=>x.id===editing);if(!b||!Array.isArray(b.txs))return;
+  const ticked=new Set([...document.querySelectorAll('[data-tx]:checked')].map(i=>i.dataset.tx));
+  if(!ticked.size){formError('Tick at least one payment to split off.');return;}
+  const moved=b.txs.filter(x=>ticked.has(x.d+'|'+x.a)),left=b.txs.filter(x=>!ticked.has(x.d+'|'+x.a));
+  if(!left.length){formError('Leave at least one payment on this bill.');return;}
+  const keepInc=b.include;
+  Object.assign(b,seriesFields(left,left.length>=2?null:b.cadence),{locked:true,total:false,grp:grpOf(b)||b.grp,include:keepInc});
+  const nb=Object.assign({id:'m:'+Date.now().toString(36),src:'manual',grp:b.grp,name:b.name+' (split)',owner:b.owner,category:b.category,include:true,locked:true},
+    seriesFields(moved,moved.length>=2?null:b.cadence));
+  S.bills.push(nb);editing=nb.id;confirmDel=null;persist();
+  setMsg('editor',`Split ${plural(moved.length,'payment')} into this new bill. Give it a name and check the details, then save.`,'good');render();
+  const n=$('#e-name');if(n){n.focus();n.select();}
+}
+function recheck(){
+  const b=S.bills.find(x=>x.id===editing);if(!b)return;const g=grpOf(b);if(!g)return;
+  const inherit={category:b.category},ownersById=new Map(S.bills.filter(x=>grpOf(x)===g).map(x=>[x.id,x.owner]));
+  S.bills=S.bills.filter(x=>grpOf(x)!==g);
+  S.hidden=S.hidden.filter(id=>!(id==='d:'+g||id.startsWith('d:'+g+'|')));
+  redetect();
+  const now=S.bills.filter(x=>grpOf(x)===g);
+  now.forEach(x=>{if(!x.owner&&ownersById.get(x.id))x.owner=ownersById.get(x.id);x.category=inherit.category;});
+  editing=null;confirmRecheck=null;persist();
+  setMsg('bills',now.length?`Re-checked: found ${plural(now.length,'bill')} for this payee.`:'Re-checked: no regular bill found for this payee.','good');render();
+}
 function deleteBill(id){
   const b=S.bills.find(x=>x.id===id);if(!b)return;
   if(b.src==='auto'&&!S.hidden.includes(id))S.hidden.push(id);
@@ -947,6 +1062,7 @@ async function onRestoreFile(file){
 document.addEventListener('click',async e=>{
   const el=e.target.closest('[data-act]');if(!el)return;const a=el.dataset.act;
   if(a!=='reset')confirmReset=null;
+  if(a!=='recheck')confirmRecheck=null;
   if(a!=='delBill')confirmDel=null;
   if(a!=='catDel')confirmCat=null;
   if(a!=='pdel')confirmPerson=null;
@@ -956,6 +1072,8 @@ document.addEventListener('click',async e=>{
   else if(a==='new'){editing='new';msg=null;render();const n=$('#e-name');if(n)n.focus();}
   else if(a==='cancelEdit'){editing=null;msg=null;render();}
   else if(a==='saveBill')saveBill();
+  else if(a==='splitTx')splitTx();
+  else if(a==='recheck'){if(confirmRecheck!==editing){confirmRecheck=editing;render();}else recheck();}
   else if(a==='delBill'){const id=el.dataset.id;if(confirmDel===id)deleteBill(id);else{confirmDel=id;render();}}
   else if(a==='dupKeep'){if(!S.notDup.includes(el.dataset.key))S.notDup.push(el.dataset.key);persist();render();}
   else if(a==='filter'){catFilter=el.dataset.cat;editing=null;render();}
@@ -1012,6 +1130,9 @@ document.addEventListener('change',async e=>{
   } else if(el.dataset.cat&&el.tagName==='INPUT'){
     const c=S.categories.find(x=>x.id===el.dataset.cat);if(!c)return;
     const v=el.value.trim().slice(0,40);if(v){c.name=v;persist();}else el.value=c.name;
+  } else if(el.dataset.qown){
+    const b=S.bills.find(x=>x.id===el.dataset.qown);
+    if(b&&S.people.some(x=>x.id===el.value)){b.owner=el.value;b.locked=true;persist();setMsg('bills',`${b.name} is now paid by ${ownerName(b.owner)}.`,'good');render();}
   } else if(el.id==='e-cat'){
     const w=$('#e-newwrap');if(w){w.hidden=el.value!=='__new';if(!w.hidden)$('#e-newcat').focus();}
   } else if(el.id==='fileCsv'){
