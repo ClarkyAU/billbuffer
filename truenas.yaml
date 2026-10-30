@@ -2,7 +2,8 @@
 # Paste into Apps > Discover Apps > Custom App > Install via YAML (or Edit on the existing app).
 #
 # No passcode by default: any device on your network that opens the address can use it.
-# To require sign-in, put a passcode in BB_PASSCODE (8+ characters, no $ sign) and save.
+# To require sign-in, turn on a passcode in the app (Settings > Passcode). Or put one in BB_PASSCODE
+# (8+ characters, no $ sign): that takes priority and can then only be changed here.
 #
 # Your bills are stored once, in the "bill-buffer-data" volume on this server, and every device
 # works from that one copy. The app itself is downloaded from GitHub each time the container starts.

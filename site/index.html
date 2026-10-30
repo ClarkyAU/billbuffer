@@ -322,8 +322,8 @@ input:focus,select:focus,textarea:focus{outline:none;box-shadow:3px 3px 0 var(--
 .rlist p{margin:2px 0 0;font-size:13px}
 .files{margin:10px 0 0;padding:0;list-style:none;font-size:14px}
 .files li{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px dashed var(--line)}
-.files span:first-child{min-width:0;overflow-wrap:anywhere}
-.files span:last-child{white-space:nowrap;color:var(--muted);font:12.5px var(--f-num)}
+.files li>span:first-child{min-width:0;overflow-wrap:anywhere}
+.files li>span:last-child{white-space:nowrap;color:var(--muted);font:12.5px var(--f-num)}
 .steps{margin:8px 0 0;padding-left:20px;color:var(--muted)}
 .steps li{margin:3px 0}
 
@@ -1211,7 +1211,7 @@ let setSec='';
 const isWide=()=>!!(window.matchMedia&&window.matchMedia('(min-width:1024px)').matches);
 function settingsSections(){
   return [['people','People and paydays','Who pays in, and when'],['buffer','Buffer','What to keep spare'],['categories','Categories','Group your bills'],
-    ['statements','Statements','Import, and what is kept'],...(Sync.mode==='on'?[['sharing','Sharing','This device and access']]:[]),
+    ['statements','Statements','Import, and what is kept'],...(Sync.mode==='on'?[['passcode','Passcode',Sync.open?'Off: anyone at home can open it':'On: devices and signing out']]:[]),
     ['backup','Backup','Save or restore a copy'],['reset','Reset','Clear things or start again']];
 }
 function sectionBody(k){
@@ -1221,7 +1221,7 @@ function sectionBody(k){
       <p class="note">The least you want left in the account at any time. The figure on Now always keeps this much spare.</p></section>`;
   if(k==='categories')return categoriesHtml();
   if(k==='statements')return statementsHtml();
-  if(k==='sharing')return syncCardHtml();
+  if(k==='passcode')return passcodeHtml();
   if(k==='backup')return backupHtml();
   return resetHtml();
 }
@@ -1282,11 +1282,19 @@ function resetHtml(){
    straight to the server, so every device works on the same version. If someone else saves
    first, the save is refused and the latest version is shown instead of overwriting it.
    With a passcode set on the server, each device signs in once and gets its own token. */
-var Sync={open:false,mode:SERVER_MODE?'loading':'local',status:'',timer:null,poll:null,lastOk:null,busy:false,gen:0,dirty:false,signinErr:'',confirmAll:false,notice:'',down:false};
+var Sync={open:false,lock:null,mode:SERVER_MODE?'loading':'local',status:'',timer:null,poll:null,lastOk:null,busy:false,gen:0,dirty:false,signinErr:'',confirmAll:false,notice:'',down:false};
 const SKEY='billbuffer.sync';
-let SY=(()=>{try{const o=JSON.parse(localStorage.getItem(SKEY))||{};return {token:o.token,device:o.device};}catch(e){return {};}})();
+/* A device's sign-in is kept for good (localStorage), or only until the app is closed (sessionStorage)
+   when "Keep this device signed in" was unticked. */
+let SY=(()=>{let o={},t;try{o=JSON.parse(localStorage.getItem(SKEY))||{};}catch(e){}
+  if(!o.token){try{t=sessionStorage.getItem(SKEY+'.token')||undefined;}catch(e){}}
+  return {token:o.token||t,device:o.device,remember:!t};})();
 let serverVersion=0;
-function sySave(){try{localStorage.setItem(SKEY,JSON.stringify({token:SY.token,device:SY.device}));}catch(e){}}
+function sySave(){
+  const keep=SY.remember!==false;
+  try{localStorage.setItem(SKEY,JSON.stringify({token:keep?SY.token:undefined,device:SY.device}));}catch(e){}
+  try{if(!keep&&SY.token)sessionStorage.setItem(SKEY+'.token',SY.token);else sessionStorage.removeItem(SKEY+'.token');}catch(e){}
+}
 const guessDevice=()=>/Android|iPhone|Mobile/i.test(navigator.userAgent)?'Phone':'Computer';
 async function api(method,path,body){
   const hd={'Content-Type':'application/json','X-BB-Device':(SY.device||guessDevice()).replace(/[^\x20-\x7e]/g,'')};
@@ -1369,18 +1377,18 @@ async function boot(){
   try{const r=await fetch('api/status',{cache:'no-store',credentials:'omit'});if(r.ok)st=await r.json();}catch(e){}
   if(!st||st.app!=='bill-buffer'){Sync.mode='on';Sync.down=true;Sync.status='offline';startPolling();render();return;}
   if(!st.ready){Sync.mode='nopass';render();return;}
-  Sync.open=!!st.open;
+  Sync.open=!!st.open;Sync.lock=st.lock||null;
   if(Sync.open){if(!SY.device){SY.device=guessDevice();sySave();}}
   else if(!SY.token){Sync.mode='signin';render();return;}
   Sync.mode='on';startPolling();await loadFromServer();
 }
 async function doSignin(){
-  const pass=$('#si-pass').value,device=($('#si-dev').value||'').trim()||guessDevice();
+  const pass=$('#si-pass').value,device=($('#si-dev').value||'').trim()||guessDevice(),remember=$('#si-keep').checked;
   if(!pass){Sync.signinErr='Enter the household passcode.';render();return;}
   let r;
   try{r=await api('POST','login',{passcode:pass,device});}catch(e){Sync.signinErr="Can't reach the server. Check you're on your home network.";render();return;}
   if(r.status===200&&r.data&&r.data.token){
-    SY={token:r.data.token,device};sySave();
+    SY={token:r.data.token,device,remember};sySave();
     Sync.signinErr='';Sync.mode='on';startPolling();await loadFromServer();return;
   }
   if(r.status===429){const m=Math.max(1,Math.ceil(((r.data&&r.data.retryAfter)||900)/60));Sync.signinErr=`Too many wrong tries. Try again in ${plural(m,'minute')}.`;}
@@ -1395,7 +1403,9 @@ function signinHtml(){
     <form id="signinForm" autocomplete="on"><div class="fields">
       <div class="field wide"><label for="si-pass">Household passcode</label><input id="si-pass" type="password" autocomplete="current-password"></div>
       <div class="field wide"><label for="si-dev">Name this device</label><input id="si-dev" type="text" maxlength="40" value="${esc(SY.device||guessDevice())}"></div>
-    </div><div class="btnrow"><button class="btn" type="submit">Sign in</button></div></form>
+    </div><label class="check"><input type="checkbox" id="si-keep" checked> Keep this device signed in</label>
+    <p class="note">Untick it on a shared device to be asked for the passcode each time the app is opened.</p>
+    <div class="btnrow"><button class="btn" type="submit">Sign in</button></div></form>
     ${Sync.signinErr?`<div class="msg bad" role="status">${esc(Sync.signinErr)}</div>`:''}</section>`;
 }
 function nopassHtml(){
@@ -1410,15 +1420,60 @@ function noticeHtml(){
   if(!Sync.notice)return '';
   return `<section class="banner"><p>${esc(Sync.notice)}</p><button class="btn small" data-act="dismissNotice">OK</button></section>`;
 }
-function syncCardHtml(){
+/* ---------- Settings: passcode ----------
+   The lock lives on the server, so it can't be skipped by opening the address some other way. */
+function passcodeHtml(){
   if(Sync.mode!=='on')return '';
-  const head=`<section class="card"><h2>This device ${syncChip().replace('id="syncChip"','')}</h2>
-    <p>Your bills are kept on your server, and every device uses that one copy.${Sync.lastOk?' Last checked '+esc(ago(Sync.lastOk))+'.':''}</p>`;
-  if(Sync.open)return head+`<div class="fields"><div class="field wide"><label for="dev-name">This device's name</label><input id="dev-name" type="text" maxlength="40" value="${esc(SY.device||guessDevice())}" placeholder="Rob's phone"></div></div>
-    <p class="note">Shown when this device saves a change. There's no passcode, so anyone on your home network can open the app.</p></section>`;
-  return head+`<ul class="files" id="devList"><li><span>Loading devices…</span><span></span></li></ul>
+  const pw=(id,label,ac)=>`<div class="field wide"><label for="${id}">${label}</label><input id="${id}" type="password" autocomplete="${ac}" maxlength="200"></div>`;
+  const newPw=pw('pc-new','New passcode (8 or more characters)','new-password')+pw('pc-new2','Type it again','new-password');
+  if(Sync.open)return `<section class="card"><h2>Turn on a passcode</h2>
+    <p>It's off, so anyone on your home network who opens the app's address can see and change the bills. With a passcode, every device has to sign in once. This device stays signed in.</p>
+    <form id="pcOn" autocomplete="off"><div class="fields">${newPw}</div><div class="btnrow"><button class="btn" type="submit">Turn on passcode</button></div></form>${msgHtml('passcode')}</section>`;
+  const devices=`<section class="card"><h2>Signed-in devices</h2>
+    <p>${Sync.lock==='server'?'The passcode is on. It is set in TrueNAS (<code>BB_PASSCODE</code>), so change or remove it there: Apps, bill-buffer, Edit.':'The passcode is on. Each device signs in once with it.'}</p>
+    <ul class="files" id="devList"><li><span>Loading devices…</span><span></span></li></ul>
     <div class="btnrow"><button class="btn small ghost" data-act="signOut">Sign out this device</button>
-    <button class="btn small danger" data-act="signOutAll">${Sync.confirmAll?'Tap again to sign out all':'Sign out every device'}</button></div></section>`;
+    <button class="btn small danger" data-act="signOutAll">${Sync.confirmAll?'Tap again to sign out all':'Sign out every device'}</button></div>${msgHtml('passcode')}</section>`;
+  if(Sync.lock==='server')return devices;
+  return devices+`<section class="card"><h2>Change passcode</h2><p>Every other device will need to sign in again with the new one.</p>
+    <form id="pcChange" autocomplete="off"><div class="fields">${pw('pc-cur','Current passcode','current-password')}${newPw}</div><div class="btnrow"><button class="btn" type="submit">Change passcode</button></div></form>${msgHtml('pcchange')}</section>
+  <section class="card"><h2>Turn off passcode</h2><p>Anyone on your home network will be able to open the app without signing in.</p>
+    <form id="pcOff" autocomplete="off"><div class="fields">${pw('pc-off','Current passcode','current-password')}</div><div class="btnrow"><button class="btn danger" type="submit">Turn off passcode</button></div></form>${msgHtml('pcoff')}</section>`;
+}
+async function passcodeSubmit(id){
+  const v=x=>{const e=$(x);return e?e.value:'';};
+  const where=id==='pcOn'?'passcode':id==='pcChange'?'pcchange':'pcoff';
+  const fail=t=>{setMsg(where,t,'bad');render();};
+  let body;
+  if(id==='pcOff'){if(!v('#pc-off'))return fail('Enter the current passcode.');body={current:v('#pc-off'),new:''};}
+  else{
+    const n=v('#pc-new');
+    if(id==='pcChange'&&!v('#pc-cur'))return fail('Enter the current passcode.');
+    if(n.length<8)return fail('Use at least 8 characters.');
+    if(n!==v('#pc-new2'))return fail("The two new passcodes don't match.");
+    body={current:v('#pc-cur'),new:n};
+  }
+  let r;try{r=await api('POST','passcode',body);}catch(e){return fail("Can't reach the server. Try again.");}
+  if(r.status===200){
+    if(r.data.on){SY.token=r.data.token;sySave();Sync.open=false;Sync.lock='app';
+      setMsg('passcode',id==='pcOn'?'Passcode on. Other devices will ask for it.':'Passcode changed. Other devices will need the new one.','good');}
+    else{SY.token=undefined;sySave();Sync.open=true;Sync.lock=null;setMsg('passcode','Passcode off. Anyone on your home network can open the app.','good');}
+    return render();
+  }
+  const d=r.data||{};
+  if(r.status===401&&d.error==='wrong_passcode')return fail(`That passcode isn't right.${d.triesLeft>0?` ${plural(d.triesLeft,'try','tries')} left before a 15 minute lockout.`:''}`);
+  if(r.status===429)return fail(`Too many wrong tries. Try again in ${plural(Math.max(1,Math.ceil((d.retryAfter||900)/60)),'minute')}.`);
+  if(r.status===401)return signedOut();
+  if(r.status===409){Sync.open=false;Sync.lock='server';return fail('The passcode is set in TrueNAS, so change it there.');}
+  if(r.status===400&&d.error==='bad_length')return fail('Use at least 8 characters.');
+  fail("The passcode couldn't be changed. Try again.");
+}
+/* Checks the lock on the server (another device may have changed it), then lists signed-in devices. */
+async function loadPasscode(){
+  try{const r=await fetch('api/status',{cache:'no-store',credentials:'omit'});const st=await r.json();
+    if(!!st.open!==Sync.open||(st.lock||null)!==Sync.lock){Sync.open=!!st.open;Sync.lock=st.lock||null;
+      if(Sync.open){SY.token=undefined;sySave();}render();return;}}catch(e){}
+  if(!Sync.open)loadDevices();
 }
 async function loadDevices(){
   try{const r=await api('GET','devices');if(r.status!==200)throw 0;
@@ -1444,7 +1499,7 @@ function render(){
   if(!TABS.some(x=>x[0]===tab))tab='now';
   const body=tab==='now'?viewNow():tab==='calendar'?viewCalendar():tab==='bills'?viewBills():viewSettings();
   $('#app').innerHTML=`<div class="top main">${brandHtml}${navHtml('topnav')}${syncChip()}</div>${navHtml('tabbar')}${Sync.down&&Sync.mode==='on'?`<section class="banner"><p><strong>Not connected to your server.</strong> Changes can't be saved until it's back.</p><button class="btn small" data-act="retry">Try again</button></section>`:''}${noticeHtml()}${body}`;
-  if(tab==='settings'&&Sync.mode==='on'&&!Sync.open&&(setSec==='sharing'))loadDevices();
+  if(tab==='settings'&&Sync.mode==='on'&&setSec==='passcode')loadPasscode();
 }
 
 /* ---------- actions ---------- */
@@ -1675,8 +1730,6 @@ document.addEventListener('change',async e=>{
   } else if(el.dataset.qown){
     const b=S.bills.find(x=>x.id===el.dataset.qown);
     if(b&&S.people.some(x=>x.id===el.value)){b.owner=el.value;b.locked=true;persist();setMsg('bills',`${b.name} is now paid by ${ownerName(b.owner)}.`,'good');render();}
-  } else if(el.id==='dev-name'){
-    const v=el.value.trim().slice(0,40);if(v){SY.device=v;sySave();}else el.value=SY.device||guessDevice();
   } else if(el.id==='autoStrip'){
     S.settings.autoStrip=el.checked;persist();
   } else if(el.id==='e-cat'){
@@ -1697,7 +1750,9 @@ function setSetting(el){
 }
 let typingTimer=null;
 document.addEventListener('input',e=>{const el=e.target;if(!el.dataset||!el.dataset.s)return;clearTimeout(typingTimer);typingTimer=setTimeout(()=>setSetting(el),300);});
-document.addEventListener('submit',e=>{if(e.target&&e.target.id==='signinForm'){e.preventDefault();doSignin();}});
+document.addEventListener('submit',e=>{const id=e.target&&e.target.id;if(!id)return;
+  if(id==='signinForm'){e.preventDefault();doSignin();}
+  else if(/^pc(On|Change|Off)$/.test(id)){e.preventDefault();passcodeSubmit(id);}});
 document.addEventListener('keydown',e=>{if(e.key!=='Enter')return;if(e.target.id==='newCat'){e.preventDefault();if(newCategory(e.target.value)){persist();render();}}});
 document.addEventListener('toggle',e=>{const d=e.target;if(!d||!d.dataset)return;if(d.classList&&d.classList.contains('working'))openWorking=d.open;if(d.dataset.i!=null){const i=+d.dataset.i;if(d.open)openSeg.add(i);else openSeg.delete(i);}},true);
 

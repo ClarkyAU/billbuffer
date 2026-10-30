@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Bill Buffer server: serves the app and keeps one shared copy of the household's data.
 
-Passcode is optional. With BB_PASSCODE empty, any device that can reach the server can use it
-(fine on a trusted home network). With BB_PASSCODE set (8+ characters), devices must sign in.
+Passcode is optional. With none set, any device that can reach the server can use it (fine on a
+trusted home network). A passcode can be turned on, changed or turned off from the app's Settings,
+or set with BB_PASSCODE (8+ characters), which takes priority. With one set, devices must sign in.
 
 Security:
 - With a passcode, every data request needs a device token. A device gets one by signing in with the
-  household passcode (BB_PASSCODE). Only a SHA-256 hash of each token is stored.
+  household passcode. Only a SHA-256 hash of each token is stored. A passcode set in the app is stored
+  as a salted PBKDF2 hash, never as plain text. Changing or turning it off needs the current passcode.
 - Wrong passcodes are rate limited per address, with a lockout.
 - Saves are versioned. A save based on an old version is refused (409) instead of
   silently overwriting someone else's change. The last 30 versions are kept on disk.
@@ -40,22 +42,54 @@ FAIL_LIMIT, FAIL_WINDOW, LOCKOUT = 5, 600, 900
 
 STATE_FILE = os.path.join(DATA, "state.json")
 TOKENS_FILE = os.path.join(DATA, "tokens.json")
+PASS_FILE = os.path.join(DATA, "passcode.json")
+PBKDF2_ITER = 200_000
+MAX_PASSCODE = 200
 HISTORY_DIR = os.path.join(DATA, "history")
 
 lock = threading.Lock()
 fails = {}  # ip -> [timestamps]
 locked_until = {}  # ip -> time
+app_pass = None  # passcode set in the app: {"salt", "iter", "hash", "set"}
 
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 mimetypes.add_type("text/javascript", ".js")
 
 
+def env_pass():
+    """A passcode set in TrueNAS (BB_PASSCODE). It takes priority over one set in the app."""
+    return PASSCODE not in ("", PLACEHOLDER)
+
+
 def open_mode():
-    return PASSCODE in ("", PLACEHOLDER)
+    return not env_pass() and app_pass is None
 
 
 def passcode_ready():
-    return open_mode() or len(PASSCODE) >= MIN_PASSCODE
+    return not env_pass() or len(PASSCODE) >= MIN_PASSCODE
+
+
+def lock_source():
+    return "server" if env_pass() else "app" if app_pass else None
+
+
+def hash_pass(passcode, salt, iterations):
+    return hashlib.pbkdf2_hmac("sha256", passcode.encode("utf-8"), bytes.fromhex(salt), iterations).hex()
+
+
+def passcode_matches(given):
+    if env_pass():
+        return hmac.compare_digest(given.encode("utf-8"), PASSCODE.encode("utf-8"))
+    if app_pass:
+        return hmac.compare_digest(hash_pass(given, app_pass["salt"], app_pass["iter"]), app_pass["hash"])
+    return False
+
+
+def load_app_pass():
+    rec = read_json(PASS_FILE, None)
+    if isinstance(rec, dict) and all(isinstance(rec.get(k), str) for k in ("salt", "hash")) and isinstance(rec.get("iter"), int):
+        return rec
+    return None
 
 
 def now():
@@ -203,6 +237,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(400, {"error": "bad_json"})
         if path == "/api/login":
             return self.login(body)
+        if path == "/api/passcode":
+            return self.set_passcode(body)
         who = self.auth()
         if not who:
             return self.send_json(401, {"error": "signed_out"})
@@ -259,7 +295,7 @@ class Handler(BaseHTTPRequestHandler):
     # ---------- api ----------
     def api_get(self, path):
         if path == "/api/status":
-            return self.send_json(200, {"app": "bill-buffer", "sync": True, "ready": passcode_ready(), "open": open_mode()})
+            return self.send_json(200, {"app": "bill-buffer", "sync": True, "ready": passcode_ready(), "open": open_mode(), "lock": lock_source()})
         who = self.auth()
         if not who:
             return self.send_json(401, {"error": "signed_out"})
@@ -281,9 +317,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(200, {"devices": devs})
         return self.send_json(404, {"error": "not_found"})
 
-    def login(self, body):
-        ip = self.client_ip()
-        t = now()
+    # ---------- passcode ----------
+    def locked_out(self, ip, t):
+        """Returns a 429 response while this address is locked out, else None."""
         with lock:
             # forget old failures and finished lockouts so these never grow without limit
             for k in [k for k, v in fails.items() if not v or v[-1] <= t - FAIL_WINDOW]:
@@ -292,29 +328,80 @@ class Handler(BaseHTTPRequestHandler):
                 locked_until.pop(k, None)
             if locked_until.get(ip, 0) > t:
                 return self.send_json(429, {"error": "locked", "retryAfter": locked_until[ip] - t})
+        return None
+
+    def wrong_passcode(self, ip, t):
+        time.sleep(1)
+        with lock:
+            recent = [x for x in fails.get(ip, []) if x > t - FAIL_WINDOW] + [t]
+            fails[ip] = recent
+            if len(recent) >= FAIL_LIMIT:
+                locked_until[ip] = t + LOCKOUT
+                fails[ip] = []
+                return self.send_json(429, {"error": "locked", "retryAfter": LOCKOUT})
+        return self.send_json(401, {"error": "wrong_passcode", "triesLeft": FAIL_LIMIT - len(recent)})
+
+    def issue_token(self, ip, device, t, keep_others=True):
+        token = secrets.token_urlsafe(32)
+        with lock:
+            fails.pop(ip, None)
+            toks = load_tokens() if keep_others else {}
+            toks[token_hash(token)] = {"device": device, "created": t, "lastSeen": t}
+            write_json(TOKENS_FILE, toks)
+        return token
+
+    def login(self, body):
+        ip, t = self.client_ip(), now()
+        out = self.locked_out(ip, t)
+        if out:
+            return out
         if open_mode():
             return self.send_json(400, {"error": "no_passcode_needed"})
         if not passcode_ready():
             return self.send_json(503, {"error": "no_passcode"})
-        given = str(body.get("passcode", ""))
+        given = str(body.get("passcode", ""))[:MAX_PASSCODE]
         device = str(body.get("device", "")).strip()[:40] or "Device"
-        if not hmac.compare_digest(given.encode("utf-8"), PASSCODE.encode("utf-8")):
-            time.sleep(1)
-            with lock:
-                recent = [x for x in fails.get(ip, []) if x > t - FAIL_WINDOW] + [t]
-                fails[ip] = recent
-                if len(recent) >= FAIL_LIMIT:
-                    locked_until[ip] = t + LOCKOUT
-                    fails[ip] = []
-                    return self.send_json(429, {"error": "locked", "retryAfter": LOCKOUT})
-            return self.send_json(401, {"error": "wrong_passcode", "triesLeft": FAIL_LIMIT - len(recent)})
-        token = secrets.token_urlsafe(32)
+        if not passcode_matches(given):
+            return self.wrong_passcode(ip, t)
+        return self.send_json(200, {"token": self.issue_token(ip, device, t)})
+
+    def set_passcode(self, body):
+        """Turn the passcode on, change it, or turn it off. Changing or turning it off needs a signed-in
+        device and the current passcode. Every other device is signed out either way."""
+        global app_pass
+        ip, t = self.client_ip(), now()
+        if env_pass():
+            return self.send_json(409, {"error": "set_on_server"})
+        new = str(body.get("new", ""))
+        current = str(body.get("current", ""))[:MAX_PASSCODE]
+        if new and not (MIN_PASSCODE <= len(new) <= MAX_PASSCODE):
+            return self.send_json(400, {"error": "bad_length", "min": MIN_PASSCODE})
+        if app_pass is not None:
+            if not self.auth():
+                return self.send_json(401, {"error": "signed_out"})
+            out = self.locked_out(ip, t)
+            if out:
+                return out
+            if not passcode_matches(current):
+                return self.wrong_passcode(ip, t)
+        elif not new:
+            return self.send_json(400, {"error": "already_off"})
         with lock:
-            fails.pop(ip, None)
-            toks = load_tokens()
-            toks[token_hash(token)] = {"device": device, "created": t, "lastSeen": t}
-            write_json(TOKENS_FILE, toks)
-        return self.send_json(200, {"token": token})
+            if new:
+                salt = secrets.token_hex(16)
+                rec = {"salt": salt, "iter": PBKDF2_ITER, "hash": hash_pass(new, salt, PBKDF2_ITER), "set": t}
+                write_json(PASS_FILE, rec)
+                app_pass = rec
+            else:
+                try:
+                    os.remove(PASS_FILE)
+                except FileNotFoundError:
+                    pass
+                app_pass = None
+            write_json(TOKENS_FILE, {})
+        if new:
+            return self.send_json(200, {"on": True, "token": self.issue_token(ip, self.device_name() or "Device", t, keep_others=False)})
+        return self.send_json(200, {"on": False})
 
     # ---------- static files ----------
     def static(self, path):
@@ -341,7 +428,11 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    global app_pass
     prepare_data_dir()
+    app_pass = load_app_pass()
+    if env_pass() and app_pass:
+        print("BB_PASSCODE is set, so it is used instead of the passcode set in the app.", flush=True)
     if open_mode():
         print("No passcode set: any device that can reach this server can view and change the bills.", flush=True)
     elif not passcode_ready():

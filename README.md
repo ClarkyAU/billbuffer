@@ -12,7 +12,7 @@ Works out how much should be in a shared bills account right now, and what each 
 
 1. Paste `truenas.yaml` into **Apps > Discover Apps > Custom App > Install via YAML**.
 2. Open `http://YOUR-TRUENAS-IP:47219`.
-3. Optional: to require sign-in, set `BB_PASSCODE` in the YAML (8+ characters, no `$`).
+3. Optional: to require sign-in, turn on a passcode in **Settings > Passcode**. (Or set `BB_PASSCODE` in the YAML, 8+ characters, no `$`. That one takes priority and can only be changed in TrueNAS.)
 
 The container downloads the latest app from this repo each time it starts. To update, restart the app.
 
@@ -28,9 +28,12 @@ Deleting the app in TrueNAS can delete the volume too. Keep a Drive backup from 
 
 ## Security
 
-- **Passcode is optional.** With `BB_PASSCODE` empty, anyone who can reach the server on your network can use it.
-  With a passcode, devices sign in once and get their own token (only a SHA-256 hash is stored), five wrong
-  tries lock sign-in for 15 minutes, and you can sign out one device or every device from Settings > Sharing.
+- **Passcode is optional.** With none set, anyone who can reach the server on your network can use it.
+  Turn one on, change it or turn it off in Settings > Passcode; changing or turning it off needs the current
+  passcode, and every other device is signed out. It is stored as a salted PBKDF2 hash, never as plain text.
+  Devices sign in once and get their own token (only a SHA-256 hash is stored), or untick "Keep this device
+  signed in" to be asked each time the app is opened. Five wrong tries lock sign-in for 15 minutes.
+  A passcode in `BB_PASSCODE` takes priority over one set in the app.
 - **No silent overwrites.** Saves are versioned; a save based on an older version is refused.
 - **Locked-down container.** The server drops root to an unprivileged user after preparing `/data`, all other
   Linux capabilities are dropped, and `no-new-privileges` is set. Data files are readable by that user only.
