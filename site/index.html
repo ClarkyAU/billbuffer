@@ -214,7 +214,9 @@ details[open] .chev{transform:rotate(-135deg);margin-top:3px}
 .pblock{border-top:1px solid var(--line);padding:14px 16px;display:grid;gap:10px}
 .pblock.open{background:color-mix(in srgb,var(--accent-soft) 35%,transparent)}
 .pblock.nobody{background:color-mix(in srgb,var(--warn-soft) 45%,transparent)}
-.ptop{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:start}
+.ptop{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:12px;align-items:center;list-style:none;cursor:pointer}
+.ptop::-webkit-details-marker{display:none}
+.pblock:not([open]){gap:0}
 .pname{font:700 17px/1.2 var(--f-body)}
 .ptop .bs{color:var(--muted);font-size:13px;margin-top:2px}
 .ppay{font:600 20px var(--f-num);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
@@ -712,7 +714,7 @@ const ownerName=id=>{const x=S.people.find(q=>q.id===id);return x?x.name:'No own
 let tab='now',msg=null,pendingRestore=null,confirmReset=null,dl=null,clearTimer=null;
 let confirmRecheck=null,editing=null,confirmDel=null,catFilter='all',confirmCat=null,ownFilter='all',confirmPerson=null,editingP=null;
 let calY=null,calM=null,selDay=null;
-const openSeg=new Set();
+const openSeg=new Set(),openPeople=new Set();
 const $=s=>document.querySelector(s);
 function setMsg(t,text,kind){msg={tab:t,text,kind};}
 function msgHtml(where){return msg&&msg.tab===where?`<div class="msg ${msg.kind||''}" role="status">${esc(msg.text)}</div>`:'';}
@@ -762,20 +764,20 @@ function personHtml(P){
   const blocks=P.people.map(r=>{
     const id=r.p.id,open=editingP===id;
     const bills=S.bills.filter(b=>b.include&&b.owner===id).sort(byDue);
-    return `<div class="pblock ${open?'open':''}">
-      <div class="ptop"><div><div class="pname">${esc(r.p.name)}</div>
-        <div class="bs">${esc(r.f.label)}${r.next!=null?' · next payday '+esc(fmtDay(r.next)):' <span class="pill warn">No payday</span>'}</div></div>
-        <div class="ppay"><small>Puts in</small>${f0(r.payIn)}</div></div>
+    return `<details class="pblock ${open?'open':''}" data-pid="${esc(id)}" ${open||openPeople.has(id)?'open':''}>
+      <summary class="ptop"><div><div class="pname">${esc(r.p.name)}</div>
+        <div class="bs">${esc(r.f.label)}${r.next!=null?' · next payday '+esc(fmtDay(r.next)):' <span class="pill warn">No payday</span>'} · ${plural(bills.length,'bill')}</div></div>
+        <div class="ppay"><small>Puts in</small>${f0(r.payIn)}</div><span class="chev"></span></summary>
       ${bills.length?`<ul class="pbills">${bills.map(billRow).join('')}</ul>`:'<p class="note">No bills yet. Pick this person as "Who pays" on a bill.</p>'}
-      <div class="pfoot"><span>${plural(bills.length,'bill')} · ${f2(r.perPay)} per pay${r.custom?' · set amount':''}</span>
+      <div class="pfoot"><span>${f2(r.perPay)} per pay${r.custom?' · set amount':''}</span>
         <button class="btn small ghost" data-act="pedit" data-id="${esc(id)}" aria-expanded="${open}">${open?'Close':'Edit'}</button></div>
-      ${open?personEditor(r):''}</div>`;
+      ${open?personEditor(r):''}</details>`;
   }).join('');
   const none=S.bills.filter(b=>b.include&&!S.people.some(x=>x.id===b.owner)).sort(byDue);
-  const noneBlock=none.length?`<div class="pblock nobody"><div class="ptop"><div><div class="pname">No owner yet</div><div class="bs">Nobody's pay-in covers these</div></div></div>
+  const noneBlock=none.length?`<details class="pblock nobody" data-pid="__none" ${openPeople.has('__none')?'open':''}><summary class="ptop"><div><div class="pname">No owner yet</div><div class="bs">${plural(none.length,'bill')} nobody's pay-in covers</div></div><span></span><span class="chev"></span></summary>
       <ul class="pbills">${none.map(billRow).join('')}</ul>
-      <div class="pfoot"><span>${plural(none.length,'bill')}</span><button class="btn small" data-act="showUnassigned">Assign owners</button></div></div>`:'';
-  return `<section class="card flush"><div class="hd"><h2>Who puts in what</h2><p>Each person pays all of the bills they own, spread across their own pay cycle. Tap a bill to change it.</p></div>
+      <div class="pfoot"><span></span><button class="btn small" data-act="showUnassigned">Assign owners</button></div></details>`:'';
+  return `<section class="card flush"><div class="hd"><h2>Who puts in what</h2><p>Each person pays all of the bills they own, spread across their own pay cycle. Tap someone to see their bills.</p></div>
     ${blocks}${noneBlock}
     ${editingP==='new'?`<div class="pblock open"><div class="pname">New person</div>${personEditor(null)}</div>`:`<div style="padding:12px 16px 16px;border-top:1px solid var(--line)"><button class="btn" data-act="pnew">Add a person</button></div>`}</section>`;
 }
@@ -1378,7 +1380,7 @@ document.addEventListener('change',async e=>{
 });
 document.addEventListener('submit',e=>{if(e.target&&e.target.id==='signinForm'){e.preventDefault();doSignin();}});
 document.addEventListener('keydown',e=>{if(e.key!=='Enter')return;if(e.target.id==='newCat'){e.preventDefault();if(newCategory(e.target.value)){persist();render();}}});
-document.addEventListener('toggle',e=>{const d=e.target;if(d&&d.dataset&&d.dataset.i!=null){const i=+d.dataset.i;if(d.open)openSeg.add(i);else openSeg.delete(i);}},true);
+document.addEventListener('toggle',e=>{const d=e.target;if(!d||!d.dataset)return;if(d.dataset.i!=null){const i=+d.dataset.i;if(d.open)openSeg.add(i);else openSeg.delete(i);}if(d.dataset.pid!=null){if(d.open)openPeople.add(d.dataset.pid);else openPeople.delete(d.dataset.pid);}},true);
 
 boot();
 (async()=>{try{dl=window.claude&&window.claude.use?await window.claude.use('downloads'):null;}catch(e){dl=null;}})();
