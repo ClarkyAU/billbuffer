@@ -1,5 +1,5 @@
 // Bump VERSION whenever you change any file in this folder so phones pick up the update.
-const VERSION = 'bill-buffer-v29';
+const VERSION = 'bill-buffer-v30';
 const FILES = [
   './', './index.html', './manifest.webmanifest',
   './icon-192.png', './icon-512.png', './icon-maskable-512.png',
