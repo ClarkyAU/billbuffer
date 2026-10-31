@@ -1,3 +1,10 @@
+# The x-portals block gives TrueNAS a Web UI button. Other Docker hosts ignore it.
+x-portals:
+  - name: Web UI
+    scheme: http
+    host: 0.0.0.0
+    port: 47219
+    path: /
 services:
   bill-buffer:
     image: ghcr.io/clarkyau/billbuffer:latest
