@@ -407,7 +407,7 @@ input:focus,select:focus,textarea:focus{outline:none;box-shadow:3px 3px 0 var(--
 /*LOGIC_START*/
 const KEY='billbuffer.v1';
 const SERVER_MODE=true;
-const BUILD='build 32';
+const BUILD='build 33';
 const D=(y,m,d)=>Math.floor(Date.UTC(y,m,d)/864e5);
 const ymd=n=>{const t=new Date(n*864e5);return [t.getUTCFullYear(),t.getUTCMonth(),t.getUTCDate()];};
 const daysInMonth=(y,m)=>new Date(Date.UTC(y,m+1,0)).getUTCDate();
@@ -1044,8 +1044,8 @@ function segHtml(P){
 }
 function viewNow(){
   const P=plan();
-  return exampleBanner()+`<div id="warnBox">${warnHtml(P)}</div><div class="nowgrid"><div class="nl"><div class="g-hero" id="heroBox">${heroHtml(P)}</div><div class="g-today" id="todayBox">${todayHtml(P)}</div></div>
-    <div class="nr"><div class="g-tiles"><div id="tilesBox">${tilesHtml(P)}</div></div><div class="g-main" id="segBox">${segHtml(P)}</div><div class="g-side" id="catBox">${catHtml(P)}</div></div></div>`;
+  return exampleBanner()+`<div id="warnBox">${warnHtml(P)}</div><div class="nowgrid"><div class="nl"><div class="g-hero" id="heroBox">${heroHtml(P)}</div><div class="g-today" id="todayBox">${todayHtml(P)}</div><div class="g-side" id="catBox">${catHtml(P)}</div></div>
+    <div class="nr"><div class="g-tiles"><div id="tilesBox">${tilesHtml(P)}</div></div><div class="g-main" id="segBox">${segHtml(P)}</div></div></div>`;
 }
 /* After the balance or buffer changes, redraw the Now panels without rebuilding the page. */
 function refreshNow(){
