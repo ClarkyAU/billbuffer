@@ -185,6 +185,13 @@ input:focus,select:focus,textarea:focus{outline:none;box-shadow:3px 3px 0 var(--
 .c-sand{background:var(--t-sand)}.c-white{background:var(--t-white)}.c-warn{background:var(--accent)}
 
 /* ---------- cost by category ---------- */
+.today{margin:6px 0 0;padding:0;list-style:none}
+.today li{border-top:1px dashed var(--line)}
+.today li:first-child{border-top:0}
+.today .check{margin:0;padding:10px 0;min-height:48px}
+.today .tn{flex:1;min-width:0;overflow-wrap:anywhere;font-weight:700}
+.today .tn small{display:block;color:var(--muted);font-weight:400;font-size:12.5px}
+.today .ta{font:800 15px var(--f-num);white-space:nowrap}
 .catlist{margin:8px 0 0;padding:0;list-style:none}
 .catlist li{display:grid;grid-template-columns:auto minmax(0,1fr) 72px auto;gap:10px;align-items:center;padding:8px 0;border-top:1px dashed var(--line)}
 .catlist li:first-child{border-top:0}
@@ -330,8 +337,9 @@ input:focus,select:focus,textarea:focus{outline:none;box-shadow:3px 3px 0 var(--
 /* ---------- page layouts (phone first) ---------- */
 .nowgrid,.cols,.billsgrid,.setlayout,.col{display:grid;gap:18px;min-width:0;align-content:start}
 .nowgrid{grid-template-areas:"hero" "tiles" "main" "side"}
+.g-tiles{display:grid;gap:18px}
 .g-hero{grid-area:hero;margin-top:8px}.g-tiles{grid-area:tiles}.g-main{grid-area:main}.g-side{grid-area:side}
-.g-side:empty,#warnBox:empty{display:none}
+.g-side:empty,#warnBox:empty,#todayBox:empty{display:none}
 .billsgrid{grid-template-areas:"side" "list"}
 .b-list{grid-area:list;min-width:0}.b-side{grid-area:side;display:grid;gap:18px;min-width:0;align-content:start}
 .b-extra{display:none}
@@ -421,7 +429,7 @@ const DEFAULT_PEOPLE=()=>[{id:'p1',name:'You',nextPayday:'',freq:'fortnightly',p
 const FREQ={weekly:{label:'Weekly',days:7,per:365.25/7},fortnightly:{label:'Fortnightly',days:14,per:365.25/14},'4weekly':{label:'Every 4 weeks',days:28,per:365.25/28},monthly:{label:'Monthly',per:12}};
 const freqFromDays=n=>+n===7?'weekly':+n===28?'4weekly':'fortnightly';
 let S=null;
-const defaults=()=>({v:2,example:false,settings:{buffer:200,balance:'',autoStrip:false},categories:DEFAULT_CATS(),people:DEFAULT_PEOPLE(),bills:[],hidden:[],notDup:[],txns:[],files:[],meta:{lastBackup:null,changed:null}});
+const defaults=()=>({v:2,example:false,settings:{buffer:200,balance:'',autoStrip:false},categories:DEFAULT_CATS(),people:DEFAULT_PEOPLE(),bills:[],hidden:[],notDup:[],txns:[],files:[],paid:{d:0,ids:[]},meta:{lastBackup:null,changed:null}});
 
 /* ---------- CSV reading ---------- */
 function parseCSV(text){
@@ -736,6 +744,8 @@ function payDates(x,from,to){
   if(!f.days)return occurrences({cadence:'monthly',anchor:x.nextPayday,dom:ymd(a)[2]},from,to);
   const out=[];for(let d=a+Math.ceil((from-a)/f.days)*f.days;d<to;d+=f.days)out.push(d);return out;
 }
+/* Bills due today that you have ticked as already out of the account. Only holds for the day it was ticked. */
+const goneToday=(id,t)=>!!(S.paid&&S.paid.d===t&&S.paid.ids.includes(id));
 function computePlan(){
   const t=today(),s=S.settings,buf=Math.max(0,+s.buffer||0),end=t+366,FN=365.25/14;
   const act=S.bills.filter(b=>b.include&&(b.amount>0||(b.changes||[]).length));
@@ -763,7 +773,7 @@ function computePlan(){
   // rather than money still on its way.
   const todayPays=[];
   people.forEach(r=>r.dates.forEach(d=>{const e={d,pay:true,amt:r.amtFor(d),person:r.p,today:d===t};ev.push(e);if(e.today&&e.amt>0)todayPays.push(e);}));
-  act.forEach(bl=>occurrences(bl,t,end).forEach(d=>ev.push({d,bl,amt:amtOn(bl,d)})));
+  act.forEach(bl=>occurrences(bl,t,end).forEach(d=>{if(d===t&&goneToday(bl.id,t))return;ev.push({d,bl,amt:amtOn(bl,d)});}));
   ev.sort((a,b)=>a.d-b.d||(a.pay&&!b.pay?-1:b.pay&&!a.pay?1:b.amt-a.amt));
   // "Right now" covers this pay run and the next one, for everyone: every bill that lands
   // before the end of each person's next pay run, counting the pay-ins that arrive before then.
@@ -859,6 +869,7 @@ function cleanState(st,keepExample){
   // older saves kept one payday in settings; it was moved onto each person above
   const s=st.settings||{};
   d.settings={buffer:num(+s.buffer)&&+s.buffer>=0?+s.buffer:200,balance:(s.balance===''||s.balance==null||isNaN(+s.balance))?'':+s.balance,autoStrip:!!s.autoStrip};
+  {const p=st.paid||{};d.paid={d:num(p.d)?p.d:0,ids:(Array.isArray(p.ids)?p.ids:[]).filter(str)};}
   const m=st.meta||{};d.meta={lastBackup:str(m.lastBackup)?m.lastBackup:null,changed:num(m.changed)?m.changed:null};
   d.example=keepExample?!!st.example:false;
   return d;
@@ -970,6 +981,14 @@ function tilesHtml(P){
   if(t.length%2)t[t.length-1]=t[t.length-1].replace('class="tile ','class="tile wide ');
   return `<div class="tiles">${t.join('')}</div>`;
 }
+function todayHtml(P){
+  const t=P.t,rows=S.bills.filter(b=>b.include&&occurrences(b,t,t+1).length).map(b=>({b,gone:goneToday(b.id,t)}));
+  if(!rows.length)return '';
+  const left=rows.filter(r=>!r.gone).reduce((n,r)=>n+amtOn(r.b,t),0);
+  return `<section class="card"><h2>Coming out today</h2><p>Tick a bill once it has left the account, so the figure above stops counting it.</p>
+    <ul class="today">${rows.map(({b,gone})=>`<li><label class="check"><input type="checkbox" data-gone="${esc(b.id)}" ${gone?'checked':''}><span class="tn">${esc(b.name)}<small>${esc(ownerName(b.owner))}</small></span><span class="ta">${f2(amtOn(b,t))}</span></label></li>`).join('')}</ul>
+    <p class="note">${left>0.004?`${f2(left)} still to come out today.`:'Everything due today has gone out.'}</p></section>`;
+}
 function warnHtml(P){
   const out=[];
   if(P.missing.length)out.push(`Set a next payday for ${esc(P.missing.join(' and '))} in Settings. Their pay-ins aren't counted until you do.`);
@@ -1020,7 +1039,7 @@ function segHtml(P){
 }
 function viewNow(){
   const P=plan();
-  return exampleBanner()+`<div id="warnBox">${warnHtml(P)}</div><div class="nowgrid"><div class="g-hero" id="heroBox">${heroHtml(P)}</div><div class="g-tiles" id="tilesBox">${tilesHtml(P)}</div>
+  return exampleBanner()+`<div id="warnBox">${warnHtml(P)}</div><div class="nowgrid"><div class="g-hero" id="heroBox">${heroHtml(P)}</div><div class="g-tiles"><div id="tilesBox">${tilesHtml(P)}</div><div id="todayBox">${todayHtml(P)}</div></div>
     <div class="g-side" id="catBox">${catHtml(P)}</div><div class="g-main" id="segBox">${segHtml(P)}</div></div>`;
 }
 /* After the balance or buffer changes, redraw the Now panels without rebuilding the page. */
@@ -1028,7 +1047,7 @@ function refreshNow(){
   planMemo=null;const P=plan();
   // only touch panels whose content changed, so a tap on an unchanged tile is never lost mid-redraw
   const set=(id,h)=>{const el=$(id);if(el&&el._h!==h){el.innerHTML=h;el._h=h;}};
-  set('#heroFig',heroFig(P));set('#heroWork',heroWork(P));set('#tilesBox',tilesHtml(P));set('#warnBox',warnHtml(P));set('#catBox',catHtml(P));set('#segBox',segHtml(P));
+  set('#heroFig',heroFig(P));set('#heroWork',heroWork(P));set('#tilesBox',tilesHtml(P));set('#todayBox',todayHtml(P));set('#warnBox',warnHtml(P));set('#catBox',catHtml(P));set('#segBox',segHtml(P));
 }
 
 /* ---------- Calendar tab ---------- */
@@ -1724,6 +1743,10 @@ document.addEventListener('change',async e=>{
   const el=e.target;
   if(el.dataset.s){
     setSetting(el);
+  } else if(el.dataset.gone){
+    const t=today();if(!S.paid||S.paid.d!==t)S.paid={d:t,ids:[]};
+    S.paid.ids=S.paid.ids.filter(x=>x!==el.dataset.gone);if(el.checked)S.paid.ids.push(el.dataset.gone);
+    persist();refreshNow();
   } else if(el.dataset.cat&&el.tagName==='INPUT'){
     const c=S.categories.find(x=>x.id===el.dataset.cat);if(!c)return;
     const v=el.value.trim().slice(0,40);if(v){c.name=v;persist();}else el.value=c.name;
