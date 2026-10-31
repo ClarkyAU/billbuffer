@@ -308,6 +308,7 @@ input:focus,select:focus,textarea:focus{outline:none;box-shadow:3px 3px 0 var(--
 .sethead h2,.sectitle{min-width:0;margin:0;font:900 26px/1.1 var(--f-num);letter-spacing:-.01em}
 .sethead .btn{flex:none;white-space:nowrap}
 .setnav{display:grid;gap:12px}
+.ver{margin:6px 4px 0;text-align:center}
 .setitem{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:15px 18px;border:2.5px solid var(--edge);border-radius:14px;
   background:var(--surface);box-shadow:4px 4px 0 var(--shadow);color:var(--ink);font:inherit;text-align:left;cursor:pointer}
 .setitem b{display:block;font:900 17px/1.2 var(--f-num)}
@@ -403,6 +404,7 @@ input:focus,select:focus,textarea:focus{outline:none;box-shadow:3px 3px 0 var(--
 /*LOGIC_START*/
 const KEY='billbuffer.v1';
 const SERVER_MODE=true;
+const BUILD='build 29';
 const D=(y,m,d)=>Math.floor(Date.UTC(y,m,d)/864e5);
 const ymd=n=>{const t=new Date(n*864e5);return [t.getUTCFullYear(),t.getUTCMonth(),t.getUTCDate()];};
 const daysInMonth=(y,m)=>new Date(Date.UTC(y,m+1,0)).getUTCDate();
@@ -1248,7 +1250,8 @@ function viewSettings(){
   const secs=settingsSections(),wide=isWide();
   if(setSec&&!secs.some(x=>x[0]===setSec))setSec='';
   const cur=setSec||(wide?'people':'');
-  const nav=`<nav class="setnav" aria-label="Settings sections">${secs.map(([k,t,d])=>`<button class="setitem ${k===cur?'on':''}" data-act="setSec" data-sec="${k}" ${k===cur?'aria-current="page"':''}><span><b>${t}</b><small>${d}</small></span><span class="chev r"></span></button>`).join('')}</nav>`;
+  const ver=`<p class="note ver">Bill Buffer ${BUILD}</p>`;
+  const nav=`<nav class="setnav" aria-label="Settings sections">${secs.map(([k,t,d])=>`<button class="setitem ${k===cur?'on':''}" data-act="setSec" data-sec="${k}" ${k===cur?'aria-current="page"':''}><span><b>${t}</b><small>${d}</small></span><span class="chev r"></span></button>`).join('')}</nav>${ver}`;
   const title=cur?esc(secs.find(x=>x[0]===cur)[1]):'';
   if(!wide){
     if(!cur)return `<div class="sethead"><h2>Settings</h2></div>${nav}`;
