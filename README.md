@@ -26,6 +26,8 @@ On a NAS or Portainer, paste `docker-compose.yml` in as a new stack or custom ap
 
 **To update:** `docker compose pull && docker compose up -d`
 
+**Prefer updating with just a restart?** Use [`docker-compose.restart-updates.yml`](docker-compose.restart-updates.yml) instead. It downloads the latest version from GitHub every time the container starts, so restarting it is the update. It's also the one to use on TrueNAS if you want the Web UI button.
+
 ## Passcode
 
 Off by default, so anyone on your home network can open it. To lock it, go to **Settings > Passcode**.
