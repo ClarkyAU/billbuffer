@@ -8,6 +8,7 @@ x-portals:
 services:
   bill-buffer:
     image: ghcr.io/clarkyau/billbuffer:latest
+    pull_policy: always
     container_name: bill-buffer
     restart: unless-stopped
     ports:

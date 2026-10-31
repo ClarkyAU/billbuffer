@@ -24,7 +24,7 @@ Then open `http://YOUR-SERVER-IP:47219`.
 
 On a NAS or Portainer, paste `docker-compose.yml` in as a new stack or custom app.
 
-**To update:** on TrueNAS, press the app's update button when it appears. Anywhere else: `docker compose pull && docker compose up -d`
+**To update:** restart the container. The compose file pulls the newest image every time it starts. If your host ignores that, run `docker compose pull && docker compose up -d`.
 
 ## Passcode
 
