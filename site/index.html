@@ -238,7 +238,9 @@ input:focus,select:focus,textarea:focus{outline:none;box-shadow:3px 3px 0 var(--
 .day{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0;min-height:62px;padding:4px 4px 8px;overflow:hidden;
   border:2px solid var(--edge);border-radius:10px;background:var(--surface);color:var(--ink);font:inherit;text-align:left;cursor:pointer}
 .day.blank{visibility:hidden}
-.calmode{margin:2px 0 14px;justify-content:center}
+.needbox{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin:14px 0 2px;padding:12px 14px;border:2px solid var(--edge);border-radius:14px;background:var(--accent);color:var(--on-tile)}
+.needbox small{font:700 13px/1.3 var(--f-body)}
+.needbox strong{font:800 26px/1 var(--f-num);letter-spacing:-.01em}
 .day.past{opacity:.62}
 .day.past.sel{opacity:1}
 .day.today{background:var(--accent);color:var(--on-tile)}
@@ -409,7 +411,7 @@ input:focus,select:focus,textarea:focus{outline:none;box-shadow:3px 3px 0 var(--
 /*LOGIC_START*/
 const KEY='billbuffer.v1';
 const SERVER_MODE=true;
-const BUILD='build 36';
+const BUILD='build 37';
 const D=(y,m,d)=>Math.floor(Date.UTC(y,m,d)/864e5);
 const ymd=n=>{const t=new Date(n*864e5);return [t.getUTCFullYear(),t.getUTCMonth(),t.getUTCDate()];};
 const daysInMonth=(y,m)=>new Date(Date.UTC(y,m+1,0)).getUTCDate();
@@ -791,7 +793,7 @@ function computePlan(){
   const untilOn=d=>{
     let u=d+14;
     people.forEach(r=>{
-      const ds=r.dates.filter(x=>x>=d);
+      const ds=payDates(r.p,d,d+400);
       if(!ds.length)return;
       const cyc=r.f.days||31;
       const k=ds[0]===d?2:1;  // paid that day: this run started that day, so look two paydays on
@@ -801,8 +803,12 @@ function computePlan(){
     return u;
   };
   const reqOn=d=>{
-    const u=untilOn(d);let net=0,need=buf;
-    ev.forEach(e=>{if(e.d<d||e.d>=u||(e.pay&&e.d===d))return;net+=e.pay?e.amt:-e.amt;if(!e.pay)need=Math.max(need,buf-net);});
+    const u=untilOn(d),evs=[];
+    act.forEach(bl=>occurrences(bl,d,u).forEach(x=>{if(x===t&&goneToday(bl.id,t))return;evs.push({d:x,amt:-amtOn(bl,x)});}));
+    people.forEach(r=>payDates(r.p,d,u).forEach(x=>{if(x!==d)evs.push({d:x,amt:r.amtFor(x)});}));
+    evs.sort((a,b)=>a.d-b.d||b.amt-a.amt);
+    let net=0,need=buf;
+    evs.forEach(e=>{net+=e.amt;if(e.amt<0)need=Math.max(need,buf-net);});
     return need;
   };
   const until=untilOn(t);
@@ -939,7 +945,7 @@ const putsIn=n=>n==='You'?'You put in':n+' puts in';
 /* ---------- view state ---------- */
 let tab='now',msg=null,pendingRestore=null,confirmReset=null,dl=null,clearTimer=null;
 let confirmRecheck=null,editing=null,confirmDel=null,catFilter='all',confirmCat=null,ownFilter='all',confirmPerson=null,editingP=null;
-let calY=null,calM=null,selDay=null,calMode='bills';
+let calY=null,calM=null,selDay=null;
 const openSeg=new Set();let openWorking=false;
 const $=s=>document.querySelector(s);
 function setMsg(t,text,kind){msg={tab:t,text,kind};}
@@ -1122,11 +1128,10 @@ function viewCalendar(){
     const d=first+dd-1,past=d<t,x=past?pd.get(d):P?P.days.get(d):null;
     const bills=x?x.bills:[];const tot=bills.reduce((n,e)=>n+e.amt,0);if(!past||cur<ty*12+tm)monthTotal+=tot;
     bills.forEach(e=>used.add(catOf(e.bl.category).id));
-    const need=!past&&P&&d<P.end-60&&calMode==='need'?P.reqOn(d):null;
     const dots=bills.slice(0,4).map(e=>`<i style="${cc(e.bl.category)}"></i>`).join('')+(bills.length>4?`<b>+${bills.length-4}</b>`:'');
     const cls=[past?'past':'',d===t?'today':'',d===selDay?'sel':'',x&&x.pays.length?'pay':'',x&&x.bal<P.buf-0.004?'low':''].join(' ');
     const al=fmtFull(d)+(tot?', '+plural(bills.length,'bill')+', '+f2(tot):'')+(x&&x.pays.length?', '+x.pays.map(e=>e.person.name).join(' and ')+' paid':'');
-    cells+=`<button class="day ${cls}" data-act="day" data-d="${d}" aria-label="${esc(al)}" aria-pressed="${d===selDay}"><span class="dn">${dd}</span><span class="dots">${dots}</span>${need!=null?`<span class="damt need">${fk(need)}</span>`:calMode==='bills'&&tot?`<span class="damt">${fk(tot)}</span>`:''}</button>`;
+    cells+=`<button class="day ${cls}" data-act="day" data-d="${d}" aria-label="${esc(al)}" aria-pressed="${d===selDay}"><span class="dn">${dd}</span><span class="dots">${dots}</span>${tot?`<span class="damt">${fk(tot)}</span>`:''}</button>`;
   }
   const legend=S.categories.filter(c=>used.has(c.id)).map(c=>`<li><span class="dot" style="${cc(c.id)}"></span>${esc(c.name)}</li>`).join('')
     +`<li><span class="pb"></span>Payday</li><li><span class="lowk">12</span>Below buffer</li>`;
@@ -1137,18 +1142,17 @@ function viewCalendar(){
     const list=[];
     (x?x.pays:[]).forEach(e=>list.push(`<li class="pay"><span class="n">${esc(putsIn(e.person.name))}${e.today?'<small>Counted in today\'s balance</small>':''}</span><span class="a">+${f2(e.amt)}</span></li>`));
     (x?x.bills:[]).forEach(e=>list.push(`<li><span class="n"><i class="dot" style="${cc(e.bl.category)}"></i>${esc(e.bl.name)}<small>${esc(ownerName(e.bl.owner))} · ${esc(catOf(e.bl.category).name)}</small></span><span class="a">${f2(e.amt)}</span></li>`));
-    const need=!past&&selDay<P.end-60?P.reqOn(selDay):null;
-    const close=(need!=null?`<li class="tot"><span class="n">Needed in the account<small>${selDay===t?'For today and the next pay run':'That morning, to cover the next pay run'}</small></span><span class="a">${f2(need)}</span></li>`:'')
-      +(b!=null?`<li class="tot"><span class="n">${list.length?'Projected closing balance':'Projected balance'}${P.bal==null?'<small>Assumes you start with what is needed today</small>':''}</span><span class="a">${f2(b)}</span></li>`:'');
+    const need=P?P.reqOn(selDay):null;
+    const close='';
     detail=`<section class="card flush"><div class="hd"><p class="eyebrow">${selDay===t?'Today':past?'Past day':'Selected day'}</p><h2>${esc(fmtFull(selDay))}</h2>
+      ${need!=null?`<div class="needbox"><small>${past?'Balance should have been':'Balance should be'}</small><strong>${f2(need)}</strong></div><p class="note">In the account that morning, to cover bills until the end of the next pay run.</p>`:''}
       ${past?(list.length?'<p>Real payments from your statements where there are any, otherwise each bill\'s usual date and amount.</p>':'<p>Nothing was due.</p>'):list.length?'':'<p>No bills due.</p>'}</div>
       ${list.length||close?`<ul class="items nod">${list.join('')}${close}</ul>`:''}</section>`;
   }
   return `<div class="cols cal"><section class="card"><div class="calhead"><button class="navb" data-act="calPrev" ${canPrev?'':'disabled'} aria-label="Previous month">‹</button>
     <div><h2>${esc(fmtMonth(calY,calM))}</h2><small>${monthTotal?f2(monthTotal)+' in bills':'No bills'}${cur===ty*12+tm?' from today':cur<ty*12+tm?' paid':''}</small></div>
     <button class="navb" data-act="calNext" ${canNext?'':'disabled'} aria-label="Next month">›</button></div>
-    <div class="chips calmode" role="group" aria-label="What each day shows"><button class="chip" data-act="calMode" data-m="bills" aria-pressed="${calMode==='bills'}">Bills due</button><button class="chip" data-act="calMode" data-m="need" aria-pressed="${calMode==='need'}">Balance needed</button></div>
-    <div class="grid">${cells}</div>${calMode==='need'?'<p class="note">Each day shows what should be in the account that morning to cover bills until the end of the next pay run.</p>':''}<ul class="legend">${legend}</ul></section><div class="col">${detail}${P?cycleHtml(P):''}</div></div>`;
+    <div class="grid">${cells}</div><ul class="legend">${legend}</ul></section><div class="col">${detail}${P?cycleHtml(P):''}</div></div>`;
 }
 
 /* ---------- Bills tab ---------- */
@@ -1772,7 +1776,6 @@ document.addEventListener('click',async e=>{
   }
   else if(a==='unhide'){S.hidden=[];redetect();persist();setMsg('import','Deleted bills brought back.','good');render();}
   else if(a==='day'){selDay=+el.dataset.d;render();}
-  else if(a==='calMode'){calMode=el.dataset.m==='need'?'need':'bills';render();}
   else if(a==='calPrev'||a==='calNext'){const k=calY*12+calM+(a==='calNext'?1:-1);calY=Math.floor(k/12);calM=k%12;
     const t=today();const [ty,tm]=ymd(t);selDay=(calY===ty&&calM===tm)?t:D(calY,calM,1);render();}
   else if(a==='pasteImport'){const v=$('#pasteBox').value;if(!v.trim()){setMsg('import','Paste some rows first.','bad');render();return;}await importTexts([{name:'Pasted rows',text:v}]);}

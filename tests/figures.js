@@ -38,8 +38,8 @@ for(let i=0;i<500;i++){
   S.settings.buffer=Math.floor(rnd()*500);
   app.setS(S);const P=app.computePlan(),I=independent(S,T),d=Math.abs(P.required-I.required);
   worst=Math.max(worst,d);if(d>0.01||app.toISO(P.until)!==I.until)fails.push({i,app:P.required.toFixed(2),ind:I.required.toFixed(2)});
-  // the calendar's "needed in the account" for later days must match the same check run as if that day were today
-  for(let k=0;k<8;k++){const dd=tnum+1+Math.floor(rnd()*45),Id=independent(S,app.toISO(dd)),dif=Math.abs(P.reqOn(dd)-Id.required);nDays++;
+  // the calendar's "balance should be" for past and later days must match the same check run as if that day were today
+  for(let k=0;k<8;k++){const dd=tnum+Math.floor(rnd()*91)-45,Id=independent(S,app.toISO(dd)),dif=Math.abs(P.reqOn(dd)-Id.required);nDays++;
     worst=Math.max(worst,dif);if(dif>0.01)fails.push({i,day:app.toISO(dd),app:P.reqOn(dd).toFixed(2),ind:Id.required.toFixed(2)});}
 }
-console.log('scenarios with amount changes: 500 | later days checked: '+nDays+' | largest difference: $'+worst.toFixed(2)+' | mismatches:',fails.length);fails.slice(0,3).forEach(f=>console.log(' ',JSON.stringify(f)));if(fails.length||worst>0.01)process.exit(1);
+console.log('scenarios with amount changes: 500 | other days checked: '+nDays+' | largest difference: $'+worst.toFixed(2)+' | mismatches:',fails.length);fails.slice(0,3).forEach(f=>console.log(' ',JSON.stringify(f)));if(fails.length||worst>0.01)process.exit(1);
