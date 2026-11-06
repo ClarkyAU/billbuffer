@@ -18,6 +18,8 @@ services:
     # Optional. Leave empty and set a passcode in the app instead (Settings > Passcode).
     environment:
       BB_PASSCODE: ""
+      # Optional. Extra names this app is opened by, comma separated (e.g. bills.example.com).
+      BB_HOSTS: ""
     read_only: true
     cap_drop:
       - ALL

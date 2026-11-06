@@ -1,5 +1,5 @@
 // Bump VERSION whenever you change any file in this folder so phones pick up the update.
-const VERSION = 'bill-buffer-v33';
+const VERSION = 'bill-buffer-v34';
 const FILES = [
   './', './index.html', './manifest.webmanifest',
   './icon-192.png', './icon-512.png', './icon-maskable-512.png',
@@ -27,8 +27,11 @@ self.addEventListener('fetch', e => {
     e.respondWith(
       Promise.race([
         fetch(req).then(res => {
-          const copy = res.clone();
-          caches.open(VERSION).then(c => c.put('./index.html', copy));
+          // keep only a good page as the offline copy, never an error page
+          if (res.ok && res.type === 'basic') {
+            const copy = res.clone();
+            caches.open(VERSION).then(c => c.put('./index.html', copy));
+          }
           return res;
         }),
         new Promise((_, rej) => setTimeout(rej, 2500))

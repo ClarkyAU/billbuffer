@@ -26,6 +26,10 @@ On a NAS or Portainer, paste `docker-compose.yml` in as a new stack or custom ap
 
 **To update:** restart the container. The compose file pulls the newest image every time it starts. If your host ignores that, run `docker compose pull && docker compose up -d`.
 
+## Opening it by name
+
+Bill Buffer answers to its IP address and local names (like `truenas` or `nas.local`). To use another name, such as one from a reverse proxy, list it in `BB_HOSTS` in the compose file (comma separated) and restart.
+
 ## Passcode
 
 Off by default, so anyone on your home network can open it. To lock it, go to **Settings > Passcode**.
@@ -40,3 +44,15 @@ Chrome only offers **Install app** on a secure (`https://`) address. Two ways to
 
 - **Tailscale:** run `tailscale serve`, which gives you an `https://` address. It also works away from home.
 - **Chrome flag:** on the phone, open `chrome://flags` and turn on **Insecure origins treated as secure**. Add `http://YOUR-SERVER-IP:47219`, then restart Chrome.
+
+## Changing the code
+
+The app is in `src/`. Run `python3 build.py` to rebuild `site/`, then run the tests:
+
+```sh
+python3 tests/server_test.py
+node tests/smoke.js && node tests/today.js && node tests/figures.js && node tests/migrate.js
+node tests/sync.js && node tests/passcode.js && node tests/backup_race.js
+```
+
+The browser tests need Playwright. Raise `BUILD` in `build.py` for each release.

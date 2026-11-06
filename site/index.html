@@ -407,7 +407,7 @@ input:focus,select:focus,textarea:focus{outline:none;box-shadow:3px 3px 0 var(--
 /*LOGIC_START*/
 const KEY='billbuffer.v1';
 const SERVER_MODE=true;
-const BUILD='build 33';
+const BUILD='build 34';
 const D=(y,m,d)=>Math.floor(Date.UTC(y,m,d)/864e5);
 const ymd=n=>{const t=new Date(n*864e5);return [t.getUTCFullYear(),t.getUTCMonth(),t.getUTCDate()];};
 const daysInMonth=(y,m)=>new Date(Date.UTC(y,m+1,0)).getUTCDate();
@@ -1285,11 +1285,11 @@ function backupHtml(){
   const stale=!lb||(ch&&ch>Date.parse(lb)+1500);
   const status=lb?`Last backup ${ago(lb)}.${stale?' You have changed things since.':''}`:'No backup yet.';
   const pill=!lb?'<span class="pill bad">None</span>':stale?'<span class="pill warn">Out of date</span>':'<span class="pill good">Up to date</span>';
-  const restore=pendingRestore?`<div class="msg"><strong>Restore ${esc(pendingRestore.name)}?</strong><br>This replaces everything now on this phone${pendingRestore.exportedAt?' with the backup from '+esc(fmtLong(Math.floor(Date.parse(pendingRestore.exportedAt)/864e5))):''}.<div class="btnrow"><button class="btn small" data-act="restoreYes">Restore</button><button class="btn small ghost" data-act="restoreNo">Cancel</button></div></div>`:'';
-  return `<section class="card"><h2>Back up to Google Drive ${pill}</h2><p>${esc(status)}</p>
-    <ol class="steps"><li>Tap the button below.</li><li>When your phone asks where to send the file, pick Drive.</li><li>Choose a folder and save.</li></ol>
-    <div class="btnrow"><button class="btn" data-act="backup">Back up to Drive</button></div>${msgHtml('backup')}</section>
-  <section class="card"><h2>Restore from a backup</h2><p>${Sync.mode==='on'?'Restoring replaces the shared bills for everyone.':'Your data lives in this browser. If its site data is cleared or you switch phones, restore the latest backup file from Drive.'} Backups from older versions work too.</p>
+  const restore=pendingRestore?`<div class="msg"><strong>Restore ${esc(pendingRestore.name)}?</strong><br>This replaces ${Sync.mode==='on'?'the shared bills for everyone':'everything on this device'}${pendingRestore.exportedAt?' with the backup from '+esc(fmtLong(Math.floor(Date.parse(pendingRestore.exportedAt)/864e5))):''}.<div class="btnrow"><button class="btn small" data-act="restoreYes">Restore</button><button class="btn small ghost" data-act="restoreNo">Cancel</button></div></div>`:'';
+  return `<section class="card"><h2>Back up ${pill}</h2><p>${esc(status)}</p>
+    <ol class="steps"><li>Tap <strong>Save a backup</strong>.</li><li>On a phone, pick where to keep it, such as Drive or Files.</li><li>On a computer, it goes to your Downloads folder.</li></ol>
+    <div class="btnrow"><button class="btn" data-act="backup">Save a backup</button></div>${msgHtml('backup')}</section>
+  <section class="card"><h2>Restore from a backup</h2><p>${Sync.mode==='on'?'Restoring replaces the shared bills for everyone.':'Your data lives in this browser. If its site data is cleared or you switch phones, restore your latest backup file.'} Backups from older versions work too.</p>
     <div class="btnrow"><label class="btn ghost filebtn">Choose backup file<input id="fileRestore" type="file" accept=".json,application/json"></label></div>${restore}${msgHtml('restore')}</section>`;
 }
 function resetHtml(){
@@ -1381,6 +1381,7 @@ async function pullNow(){
     if(r.status===401)return signedOut();
     if(r.status!==200)throw 0;
     Sync.down=false;Sync.lastOk=Date.now();
+    if(Sync.dirty||Sync.busy)return;
     if(r.data.unchanged){setSyncStatus('synced');if(wasDown)render();return;}
     if(canApplyRemote()||wasDown){takeServer(r.data);setSyncStatus('synced');render();}
   }catch(e){if(!Sync.down){Sync.down=true;setSyncStatus('offline');render();}}
@@ -1643,8 +1644,8 @@ async function doBackup(){
   try{
     const payload={app:'bill-buffer',version:2,exportedAt:new Date().toISOString(),state:S};
     await saveBackupFile(`bill-buffer-backup-${toISO(today())}.json`,JSON.stringify(payload,null,1));
-    S.meta.lastBackup=new Date().toISOString();persist(false);
-    setMsg('backup','Backup done. Check that it landed in Drive.','good');
+    S.meta.lastBackup=new Date().toISOString();persist(false);queuePush();
+    setMsg('backup','Backup saved.','good');
   }catch(e){
     setMsg('backup',e&&e.code==='declined'?'Backup cancelled.':'Could not save the backup'+(e&&e.message?': '+e.message:'.'),'bad');
   }

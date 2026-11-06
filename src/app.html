@@ -1,0 +1,1781 @@
+<title>Bill Buffer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<!--HEAD-->
+<style>
+/* Bill Buffer. Neo-brutal, muted: thick outlines, hard offset shadows, dusty colour tiles, heavy Archivo numbers.
+   One stylesheet: tokens, base, components, then the phone and wide-screen layouts. */
+:root{
+  --bg:#E6E1D6; --surface:#F6F3EC; --surface-2:#ECE7DC; --line:#CDC6B7; --ink:#191816; --muted:#5E584D;
+  --edge:#191816; --shadow:#191816; --good:#2D7553; --bad:#A93B2C; --accent-soft:#EEDDB0;
+  /* colour blocks keep dark text in both themes */
+  --on-tile:#191816; --paper:#F6F3EC; --accent:#D6A84A;
+  --t-blue:#7F92CC; --t-red:#D58A72; --t-mint:#9CC8B2; --t-lilac:#B9AED6; --t-sand:#E2D3B3; --t-white:#F6F3EC;
+  --k0:#C9785F; --k1:#5C9FA4; --k2:#8F80C4; --k3:#C47390; --k4:#8C8678; --k5:#BF9A45; --k6:#78A777; --k7:#6F86C6;
+  --f-body:'Onest',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --f-num:'Archivo',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#1E1D1B; --surface:#2A2926; --surface-2:#34322E; --line:#47443E; --ink:#F1EDE4; --muted:#ABA497;
+    --edge:#0B0B0A; --shadow:#000000; --good:#86C9A6; --bad:#E59985; --accent-soft:#4A3D1D; --t-sand:#D9C9A6; --t-white:#F1EDE4;
+    --k0:#D9907A; --k1:#76B6BA; --k2:#A698D6; --k3:#D58BA6; --k4:#A39D90; --k5:#D3B160; --k6:#93C092; --k7:#8DA1DA;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#1E1D1B; --surface:#2A2926; --surface-2:#34322E; --line:#47443E; --ink:#F1EDE4; --muted:#ABA497;
+  --edge:#0B0B0A; --shadow:#000000; --good:#86C9A6; --bad:#E59985; --accent-soft:#4A3D1D; --t-sand:#D9C9A6; --t-white:#F1EDE4;
+  --k0:#D9907A; --k1:#76B6BA; --k2:#A698D6; --k3:#D58BA6; --k4:#A39D90; --k5:#D3B160; --k6:#93C092; --k7:#8DA1DA;
+  color-scheme:dark;
+}
+
+/* ---------- base ---------- */
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font:15.5px/1.5 var(--f-body);-webkit-font-smoothing:antialiased;
+  padding:20px max(16px,env(safe-area-inset-right,0px)) calc(108px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+button{font-family:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:560px;margin:0 auto;display:grid;gap:18px}
+.eyebrow,.flabel,.field label,.gname,.wd,.cnum small,.calhead small,.tile .tl,.hbal label{font:800 12px/1.2 var(--f-body);letter-spacing:.07em;text-transform:uppercase}
+.eyebrow{margin:0 0 6px;color:var(--muted)}
+.flabel,.field label,.gname,.wd,.cnum small,.calhead small{color:var(--muted)}
+.note{margin:10px 0 0;color:var(--muted);font-size:13.5px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--cc,var(--k4));flex:none}
+.chev{width:8px;height:8px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);margin-top:-3px;transition:transform .15s}
+.chev.r{transform:rotate(-45deg);margin-top:0}
+details[open] .chev,li.open>.brow .chev{transform:rotate(-135deg);margin-top:3px}
+
+/* ---------- header and navigation ---------- */
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.top small{color:var(--muted);font:700 13px var(--f-body)}
+.brand{display:flex;align-items:center;gap:10px;margin:0;font:900 22px/1 var(--f-num);letter-spacing:-.01em}
+.logo{position:relative;flex:none;width:30px;height:30px;overflow:hidden;border:2.5px solid var(--edge);border-radius:8px;background:var(--surface);box-shadow:2px 2px 0 var(--shadow)}
+.logo::after{content:"";position:absolute;inset:auto 0 0 0;height:48%;background:var(--accent);border-top:2.5px solid var(--edge)}
+.topnav{display:none}
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:20;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--surface);border-top:2.5px solid var(--edge);
+  padding:8px max(8px,env(safe-area-inset-right,0px)) calc(8px + env(safe-area-inset-bottom,0px)) max(8px,env(safe-area-inset-left,0px))}
+.tabbar button{display:grid;justify-items:center;align-content:center;gap:4px;min-height:58px;background:none;border:0;color:var(--muted);font:700 12.5px var(--f-body);cursor:pointer;-webkit-tap-highlight-color:transparent}
+.tabbar .ti{display:grid;place-items:center;width:54px;height:32px;border:2.5px solid transparent;border-radius:10px}
+.tabbar svg{width:22px;height:22px}
+.tabbar button[aria-selected="true"]{color:var(--ink)}
+.tabbar button[aria-selected="true"] .ti{background:var(--accent);color:var(--on-tile);border-color:var(--edge);box-shadow:2px 2px 0 var(--shadow)}
+
+/* ---------- cards, notices, pills ---------- */
+.card{min-width:0;background:var(--surface);border:2.5px solid var(--edge);border-radius:14px;box-shadow:5px 5px 0 var(--shadow);padding:18px}
+.card.flush{padding:0}
+.card .hd{padding:18px 18px 8px}
+.card h2{margin:0 0 4px;font:900 20px/1.15 var(--f-num);letter-spacing:-.01em;text-wrap:balance}
+.card p{margin:0 0 10px;color:var(--muted);font-size:15px}
+.card p:last-child{margin-bottom:0}
+.pad{padding:4px 18px 18px}
+.banner{display:grid;gap:8px;background:var(--t-sand);color:var(--on-tile);border:2.5px solid var(--edge);border-radius:14px;box-shadow:4px 4px 0 var(--shadow);padding:12px 14px;font-size:14.5px}
+.banner p{margin:0}
+.banner .btn{justify-self:start;min-height:40px;background:var(--paper);color:var(--on-tile)}
+.msg{margin-top:12px;padding:10px 12px;border:2px solid var(--edge);border-radius:10px;background:var(--t-lilac);color:var(--on-tile);font-size:14px}
+.msg.good{background:var(--t-mint)}
+.msg.bad{background:var(--t-red)}
+.pill{display:inline-block;padding:2px 9px;border:2px solid var(--edge);border-radius:99px;color:var(--on-tile);font:800 12px/1.35 var(--f-body);letter-spacing:.02em;white-space:nowrap;vertical-align:1px}
+.pill.good{background:var(--t-mint)}
+.pill.warn{background:var(--accent)}
+.pill.bad{background:var(--t-red)}
+.pill.acc{background:var(--t-lilac)}
+.pill.off{background:var(--surface-2);color:var(--muted)}
+
+/* ---------- forms and buttons ---------- */
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.field{display:grid;gap:5px;min-width:0;align-content:start}
+.field.wide{grid-column:1/-1}
+input[type=text],input[type=number],input[type=date],input[type=password],select,textarea{
+  width:100%;min-width:0;min-height:50px;padding:10px 12px;border:2px solid var(--edge);border-radius:10px;
+  background:var(--surface);color:var(--ink);font:500 16px var(--f-body)}
+input[type=number],input[type=date]{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+textarea{min-height:96px;font-size:14px;resize:vertical}
+input:focus,select:focus,textarea:focus{outline:none;box-shadow:3px 3px 0 var(--accent)}
+.check{display:flex;align-items:center;gap:10px;margin-top:12px;font-weight:500;cursor:pointer}
+.check input{width:24px;height:24px;margin:0;accent-color:var(--accent)}
+.btn{min-height:50px;padding:0 18px;border:2.5px solid var(--edge);border-radius:12px;background:var(--accent);color:var(--on-tile);
+  font:800 15px var(--f-body);box-shadow:3px 3px 0 var(--shadow);cursor:pointer;transition:transform .08s,box-shadow .08s}
+.btn:active{transform:translate(3px,3px);box-shadow:none}
+.btn.ghost{background:var(--surface);color:var(--ink)}
+.btn.danger{background:var(--t-red);color:var(--on-tile)}
+.btn.small{min-height:42px;padding:0 14px;border-radius:10px;font-size:14px;box-shadow:2px 2px 0 var(--shadow)}
+.btn[disabled]{opacity:.45;box-shadow:none;cursor:default}
+.btnrow{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
+.filebtn{position:relative;display:inline-flex;align-items:center;justify-content:center}
+.filebtn input{position:absolute;inset:0;width:100%;opacity:0;font-size:0;cursor:pointer}
+.filebtn:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.x{width:36px;height:36px;border:0;border-radius:8px;background:none;color:var(--muted);font-size:22px;cursor:pointer}
+.x.confirm{color:var(--bad);font-size:12px;font-weight:800}
+
+/* ---------- the figure ---------- */
+.hero{position:relative;background:var(--accent);color:var(--on-tile);border:2.5px solid var(--edge);border-radius:16px;box-shadow:7px 7px 0 var(--shadow);padding:22px 18px 16px}
+.hero .eyebrow{margin:0;color:var(--on-tile)}
+.hero .big{margin:10px 0 16px;font:900 clamp(58px,18vw,96px)/.92 var(--f-num);letter-spacing:-.035em;font-variant-numeric:tabular-nums}
+.hpill{position:absolute;top:-16px;right:16px;padding:5px 10px;background:var(--t-mint);border:2.5px solid var(--edge);border-radius:10px;box-shadow:2px 2px 0 var(--edge);
+  font:900 15px var(--f-num);white-space:nowrap;transform:rotate(2deg)}
+.hpill.bad{background:var(--t-red);transform:rotate(-3deg)}
+.gauge{position:relative;display:flex;height:24px;border:2.5px solid var(--on-tile);border-radius:8px;background:var(--paper)}
+.gfill{height:100%}
+.gfill.bills{background:var(--on-tile)}
+.gfill.buf{background:repeating-linear-gradient(135deg,var(--on-tile) 0 3px,transparent 3px 8px)}
+.gmark{position:absolute;top:-9px;bottom:-9px;width:8px;margin-left:-4px;border:2px solid var(--on-tile);border-radius:3px;background:var(--t-mint)}
+.gmark.bad{background:var(--t-red)}
+.glegend{display:flex;flex-wrap:wrap;gap:6px 16px;margin:12px 0 0;padding:0;list-style:none;font-size:13.5px}
+.glegend li{display:flex;align-items:center;gap:7px}
+.glegend b{font:900 15px var(--f-num)}
+.glegend i{flex:none;width:12px;height:12px;border:2px solid var(--on-tile);border-radius:3px}
+.glegend .k-bills{background:var(--on-tile)}
+.glegend .k-buf{background:repeating-linear-gradient(135deg,var(--on-tile) 0 2px,var(--paper) 2px 5px)}
+.glegend .k-bal{background:var(--t-mint)}
+.glegend .k-bal.bad{background:var(--t-red)}
+.hint{margin:12px 0 0;font-weight:800;font-size:14.5px}
+.hero .sub{margin:10px 0 0;max-width:52ch;opacity:.85;font-size:14.5px}
+.hbal{display:grid;grid-template-columns:minmax(0,1fr) minmax(120px,170px);gap:2px 14px;align-items:center;margin-top:16px;padding-top:14px;border-top:2px solid var(--on-tile)}
+.hbal small{font-size:13px;opacity:.8}
+.money{grid-column:2;grid-row:1/3;position:relative}
+.money span{position:absolute;left:12px;top:50%;transform:translateY(-50%);font:800 17px var(--f-num);pointer-events:none}
+.hbal input{padding-left:28px;border-color:var(--on-tile);background:var(--paper);color:var(--on-tile);font:800 18px var(--f-num)}
+.hbal input:focus{box-shadow:3px 3px 0 var(--on-tile)}
+.hbal input::placeholder{color:#7A7468;font:500 16px var(--f-body)}
+.hbal input:placeholder-shown{padding-left:12px}
+.hbal input:placeholder-shown+span{display:none}
+.hbal input{appearance:textfield;-moz-appearance:textfield}
+.hbal input::-webkit-outer-spin-button,.hbal input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.working{margin-top:14px;padding-top:10px;border-top:2px solid var(--on-tile)}
+.working summary{font-weight:800;cursor:pointer;list-style:none}
+.working summary::-webkit-details-marker{display:none}
+.working summary::after{content:" ›"}
+.working[open] summary::after{content:" ⌄"}
+.working p{margin:8px 0;opacity:.85;font-size:13.5px}
+.wlist{max-height:340px;margin:0;padding:0;overflow-y:auto;list-style:none;border:2px solid var(--on-tile);border-radius:10px;background:var(--paper);color:var(--on-tile);font-size:13px}
+.wlist li{display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:8px;align-items:start;padding:7px 10px;border-top:1px solid #CDC6B7;font-variant-numeric:tabular-nums}
+.wlist li:first-child{border-top:0}
+.wlist li span:nth-child(2){min-width:0;overflow-wrap:anywhere}
+.wlist li small{display:block;font:500 12px var(--f-num);opacity:.75}
+.wlist li span:nth-child(3){font:600 13px var(--f-num);text-align:right;white-space:nowrap}
+.wlist li.win,.wlist li.wstart{font-weight:600}
+.wlist li.wlow{outline:2.5px solid var(--on-tile);outline-offset:-3px;border-radius:6px;background:#EFC6BA}
+
+/* ---------- tiles ---------- */
+.tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.tiles.one{grid-template-columns:1fr}
+.tile{display:flex;flex-direction:column;justify-content:space-between;gap:10px;min-width:0;min-height:124px;padding:14px;text-align:left;color:var(--on-tile);font:inherit;cursor:pointer;
+  border:2.5px solid var(--edge);border-radius:14px;box-shadow:5px 5px 0 var(--shadow);transition:transform .1s,box-shadow .1s}
+.tile:hover{transform:translate(-2px,-2px);box-shadow:7px 7px 0 var(--shadow)}
+.tile:active{transform:translate(3px,3px);box-shadow:2px 2px 0 var(--shadow)}
+.tile .tv{font:900 clamp(26px,8vw,34px)/1 var(--f-num);letter-spacing:-.02em;overflow-wrap:anywhere}
+.tile .ts{font:600 13px/1.35 var(--f-body);opacity:.85}
+.tile.wide{grid-column:1/-1;min-height:96px}
+.tile[aria-pressed="true"]{outline:3px solid var(--ink);outline-offset:3px}
+.tiles .tile:nth-child(3n+2){transform:rotate(.8deg)}
+.tiles .tile:nth-child(3n+2):hover{transform:rotate(.8deg) translate(-2px,-2px)}
+.c-blue{background:var(--t-blue)}.c-red{background:var(--t-red)}.c-mint{background:var(--t-mint)}.c-lilac{background:var(--t-lilac)}
+.c-sand{background:var(--t-sand)}.c-white{background:var(--t-white)}.c-warn{background:var(--accent)}
+
+/* ---------- cost by category ---------- */
+.today{margin:6px 0 0;padding:0;list-style:none}
+.today li{border-top:1px dashed var(--line)}
+.today li:first-child{border-top:0}
+.today .check{margin:0;padding:10px 0;min-height:48px}
+.today .tn{flex:1;min-width:0;overflow-wrap:anywhere;font-weight:700}
+.today .tn small{display:block;color:var(--muted);font-weight:400;font-size:12.5px}
+.today .ta{font:800 15px var(--f-num);white-space:nowrap}
+.catlist{margin:8px 0 0;padding:0;list-style:none}
+.catlist li{display:grid;grid-template-columns:auto minmax(0,1fr) 72px auto;gap:10px;align-items:center;padding:8px 0;border-top:1px dashed var(--line)}
+.catlist li:first-child{border-top:0}
+.catlist .cn{min-width:0;overflow-wrap:anywhere}
+.catlist .cbar{height:6px;overflow:hidden;border:1px solid var(--line);border-radius:3px;background:var(--bg)}
+.catlist .cbar i{display:block;height:100%;background:var(--cc)}
+.catlist .cv{min-width:64px;text-align:right;font:800 14px var(--f-num);font-variant-numeric:tabular-nums}
+.catlist li.tot{border-top:1.5px solid var(--line);font-weight:700}
+
+/* ---------- coming fortnights ---------- */
+.cyc details{border-top:1.5px solid var(--line)}
+.cyc summary{display:grid;gap:10px;padding:14px 18px;list-style:none;cursor:pointer}
+.cyc summary::-webkit-details-marker{display:none}
+.crow{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;grid-template-areas:"date num chev" "meta meta meta" "pills pills pills";column-gap:12px;row-gap:3px;align-items:end}
+.cdate{grid-area:date;font:900 17px var(--f-num)}
+.cmeta{grid-area:meta;color:var(--muted);font-size:13px}
+.cpills{grid-area:pills;display:flex;flex-wrap:wrap;gap:6px;margin-top:5px}
+.cnum{grid-area:num;text-align:right;white-space:nowrap;font:800 19px var(--f-num);font-variant-numeric:tabular-nums}
+.cnum small{display:block}
+.cnum.bad{color:var(--bad)}
+.crow .chev{grid-area:chev;align-self:center}
+.track{height:10px;overflow:hidden;border:2px solid var(--edge);border-radius:6px;background:var(--surface-2)}
+.track i{display:block;height:100%;background:var(--ink)}
+.items{margin:0;padding:0 18px 14px;list-style:none}
+.items li{display:grid;grid-template-columns:84px minmax(0,1fr) auto;gap:10px;padding:8px 0;border-top:1px dashed var(--line);font-size:14px}
+.items.nod li{grid-template-columns:minmax(0,1fr) auto}
+.items .d{padding-top:2px;color:var(--muted);font:500 12.5px var(--f-num)}
+.items .n{min-width:0;overflow-wrap:anywhere}
+.items .n .dot{margin-right:7px}
+.items .n small{display:block;color:var(--muted);font-size:12px}
+.items li:not(.pay) .n small{padding-left:17px}
+.items .a{text-align:right;white-space:nowrap;font:800 14px var(--f-num);font-variant-numeric:tabular-nums}
+.items li.tot{font-weight:700}
+.items li.pay .a{color:var(--good)}
+
+/* ---------- calendar ---------- */
+.calhead{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.calhead h2{margin:0;text-align:center;font:900 22px var(--f-num)}
+.calhead small{display:block;text-align:center}
+.navb{flex:none;width:44px;height:44px;border:2px solid var(--edge);border-radius:10px;background:var(--surface);box-shadow:2px 2px 0 var(--shadow);color:var(--ink);font-size:20px;cursor:pointer}
+.navb[disabled]{opacity:.35;box-shadow:none;cursor:default}
+.grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin-top:12px}
+.wd{padding:2px 0;text-align:center}
+.day{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0;min-height:62px;padding:4px 4px 8px;overflow:hidden;
+  border:2px solid var(--edge);border-radius:10px;background:var(--surface);color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.day.blank{visibility:hidden}
+.day.past{opacity:.35}
+.day.today{background:var(--accent);color:var(--on-tile)}
+.day.sel{box-shadow:3px 3px 0 var(--shadow);transform:translate(-1px,-1px)}
+.day.pay::after{content:"";position:absolute;left:4px;right:4px;bottom:3px;height:5px;border-radius:3px;background:var(--ink)}
+.day.today.pay::after{background:var(--on-tile)}
+.dn{font:700 12px/1.4 var(--f-num)}
+.day.low .dn{color:var(--bad)}
+.day.today.low .dn{color:var(--on-tile);text-decoration:underline 2px}
+.dots{display:flex;flex-wrap:wrap;align-items:center;gap:2px}
+.dots i{width:7px;height:7px;border-radius:50%;background:var(--cc)}
+.dots b{font:600 9px var(--f-num);color:var(--muted)}
+.damt{margin-top:auto;white-space:nowrap;color:var(--muted);font:500 10px var(--f-num)}
+.day.today .damt,.day.today .dots b{color:var(--on-tile)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 0;padding:0;list-style:none;color:var(--muted);font-size:12.5px}
+.legend li{display:flex;align-items:center;gap:6px}
+.legend .pb{width:14px;height:5px;border-radius:3px;background:var(--ink)}
+.legend .lowk{color:var(--bad);font:700 12px var(--f-num)}
+
+/* ---------- bills ---------- */
+.filters{display:grid;gap:12px;min-width:0}
+.fgroup{display:grid;gap:7px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 12px;border:2px solid var(--edge);border-radius:99px;background:var(--surface);
+  box-shadow:2px 2px 0 var(--shadow);color:var(--ink);font:700 14px var(--f-body);cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--accent);color:var(--on-tile)}
+.chip span{font:600 11.5px var(--f-num);opacity:.7}
+.blist{margin:0;padding:0;list-style:none}
+.blist>li{border-top:1.5px solid var(--line)}
+.blist>li:first-child{border-top:0}
+.blist li.open{background:var(--surface-2)}
+.blist li.off .bn,.blist li.off .bamt{opacity:.5}
+.brow{display:grid;grid-template-columns:auto minmax(0,1fr) auto 12px;gap:12px;align-items:center;width:100%;min-height:64px;padding:14px 18px;
+  background:none;border:0;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.brow .bn{display:block;overflow-wrap:anywhere;font-size:15.5px;font-weight:700}
+.brow .bs{display:block;color:var(--muted);font-size:13px}
+.brow .bamt{white-space:nowrap;font:800 15px var(--f-num);font-variant-numeric:tabular-nums}
+.brow .bamt small{display:block;text-align:right;color:var(--muted);font:500 11.5px var(--f-num)}
+.ghead{display:grid;gap:2px;padding:14px 18px 4px}
+.gmeta{color:var(--muted);font-size:12.5px}
+.blist.sub{margin:0 0 6px 18px;border-left:2px solid var(--line)}
+.blist.sub>li{border-top:1px dashed var(--line)}
+.blist.sub>li:first-child{border-top:0}
+.empty{padding:18px;color:var(--muted)}
+.dup,.quickown{margin:0 18px 14px;padding:10px 12px;border:2px solid var(--edge);border-radius:12px;background:var(--accent-soft);color:var(--ink);font-size:14px}
+.dup p{margin:0;color:inherit}
+.quickown{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:center;font-weight:600}
+.quickown select{min-height:42px}
+.editor{padding:0 18px 18px}
+.editor .fields{margin-top:0}
+.tempbox{margin-top:14px;padding:10px 12px;border:2px dashed var(--edge);border-radius:12px}
+.tempbox .fields{margin-top:8px}
+.chlist{margin:6px 0 0;padding:0;list-style:none;font-size:14px}
+.chlist li{display:grid;grid-template-columns:auto minmax(0,1fr) 36px;gap:10px;align-items:center;padding:4px 0;border-top:1px dashed var(--line)}
+.chlist li:first-child{border-top:0}
+.chlist .a{font:800 14px var(--f-num)}
+.chlist li.ended{opacity:.5}
+.chlist .chnone{display:block;padding:4px 0;color:var(--muted)}
+.txbox{margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)}
+.txlist{max-height:260px;margin:8px 0 0;padding:0;overflow-y:auto;list-style:none;border:2px solid var(--edge);border-radius:10px;background:var(--surface)}
+.txlist li+li{border-top:1px solid var(--line)}
+.txlist label{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 10px;cursor:pointer}
+.txlist input{width:20px;height:20px;margin:0;accent-color:var(--accent)}
+.txlist .d{color:var(--muted);font:500 13px var(--f-num)}
+.txlist .a{font:800 14px var(--f-num);font-variant-numeric:tabular-nums}
+
+/* ---------- settings ---------- */
+.sethead{display:flex;align-items:center;gap:14px;min-width:0}
+.sethead h2,.sectitle{min-width:0;margin:0;font:900 26px/1.1 var(--f-num);letter-spacing:-.01em}
+.sethead .btn{flex:none;white-space:nowrap}
+.setnav{display:grid;gap:12px}
+.ver{margin:6px 4px 0;text-align:center}
+.setitem{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:15px 18px;border:2.5px solid var(--edge);border-radius:14px;
+  background:var(--surface);box-shadow:4px 4px 0 var(--shadow);color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.setitem b{display:block;font:900 17px/1.2 var(--f-num)}
+.setitem small{display:block;color:var(--muted);font-size:13.5px}
+.setitem.on{background:var(--accent);color:var(--on-tile)}
+.setitem.on small{color:var(--on-tile)}
+.setitem.on .chev{border-color:var(--on-tile)}
+.setitem:active{transform:translate(3px,3px);box-shadow:1px 1px 0 var(--shadow)}
+.cats{margin:4px 0 0;padding:0;list-style:none}
+.cats li{display:grid;grid-template-columns:44px minmax(0,1fr) 58px 36px;gap:8px;align-items:center;padding:5px 0}
+.swatch{display:grid;place-items:center;width:44px;height:44px;border:2px solid var(--edge);border-radius:10px;background:var(--surface);cursor:pointer}
+.swatch::before{content:"";width:18px;height:18px;border-radius:50%;background:var(--cc)}
+.ccount{text-align:right;white-space:nowrap;color:var(--muted);font:500 12px var(--f-num)}
+.addcat{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-top:10px}
+.addcat .btn{min-height:50px}
+.rlist{margin:8px 0 0;padding:0;list-style:none}
+.rlist li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 0;border-top:1px dashed var(--line)}
+.rlist li:first-child{border-top:0}
+.rlist p{margin:2px 0 0;font-size:13px}
+.files{margin:10px 0 0;padding:0;list-style:none;font-size:14px}
+.files li{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px dashed var(--line)}
+.files li>span:first-child{min-width:0;overflow-wrap:anywhere}
+.files li>span:last-child{white-space:nowrap;color:var(--muted);font:12.5px var(--f-num)}
+.steps{margin:8px 0 0;padding-left:20px;color:var(--muted)}
+.steps li{margin:3px 0}
+
+/* ---------- page layouts (phone first) ---------- */
+.nowgrid,.cols,.billsgrid,.setlayout,.col{display:grid;gap:18px;min-width:0;align-content:start}
+
+.nl,.nr{display:contents}
+.g-tiles{display:grid;gap:18px}
+.g-hero{order:1;margin-top:8px}.g-tiles{order:2}.g-today{order:3}.g-main{order:4}.g-side{order:5}
+.g-side:empty,#warnBox:empty,#todayBox:empty{display:none}
+.billsgrid{grid-template-areas:"side" "list"}
+.b-list{grid-area:list;min-width:0}.b-side{grid-area:side;display:grid;gap:18px;min-width:0;align-content:start}
+.b-extra{display:none}
+
+@media (max-width:380px){.fields{grid-template-columns:1fr}.hbal{grid-template-columns:1fr}.money{grid-column:1;grid-row:auto}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* ---------- wide screens ---------- */
+@media (min-width:1024px){
+  body{padding:28px max(40px,env(safe-area-inset-right,0px)) 48px max(40px,env(safe-area-inset-left,0px))}
+  .wrap{max-width:1220px;gap:26px}
+  .tabbar{display:none}
+  .top.main{display:grid;grid-template-columns:1fr auto 1fr;gap:28px}
+  .top.main>:last-child{justify-self:end}
+  .brand{font-size:26px}
+  .topnav{display:flex;gap:12px}
+  .topnav button{display:flex;align-items:center;gap:8px;min-height:46px;padding:0 16px;border:2.5px solid var(--edge);border-radius:12px;background:var(--surface);
+    box-shadow:3px 3px 0 var(--shadow);color:var(--ink);font:800 15px var(--f-body);cursor:pointer}
+  .topnav .ti{display:contents}
+  .topnav svg{width:19px;height:19px}
+  .topnav button[aria-selected="true"]{background:var(--accent);color:var(--on-tile)}
+  .topnav button:active{transform:translate(3px,3px);box-shadow:none}
+  /* Now: two independent columns, so one growing never moves the other. The figure and the fortnights on the left;
+     the tiles, stepping down, and the costs on the right. */
+  .nowgrid{grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:30px;align-items:start}
+  .nl,.nr{display:grid;gap:30px;min-width:0;align-content:start}
+  
+  .g-tiles .tiles{gap:18px}
+  .g-tiles .tile{min-height:148px}
+  .g-tiles .tile:nth-child(even){margin-top:22px}
+  .hero{padding:28px 26px 20px}
+  .hero .big{font-size:112px}
+  /* Calendar: the month on the left, the chosen day beside it */
+  .cols.cal{grid-template-columns:minmax(0,1.6fr) minmax(300px,1fr);gap:30px;align-items:start}
+  .cols.cal>.col{position:sticky;top:24px}
+  .cols.cal .grid{gap:6px}
+  .cols.cal .day{min-height:76px;padding:7px 8px 10px}
+  .cols.cal .dn{font-size:15px}
+  .cols.cal .damt{font-size:12px}
+  .cols.cal .dots i{width:8px;height:8px}
+  /* Bills: the list on the left, filters and totals on the right */
+  .billsgrid{grid-template-columns:minmax(0,1.7fr) minmax(280px,1fr);grid-template-areas:"list side";gap:30px;align-items:start}
+  .b-side{position:sticky;top:24px}
+  .b-side .filters{background:var(--surface);border:2.5px solid var(--edge);border-radius:14px;box-shadow:5px 5px 0 var(--shadow);padding:16px 18px}
+  .b-extra{display:grid;gap:18px}
+  .b-list .addrow{display:none}
+  /* Settings: sections on the left, the open one on the right */
+  .setlayout{grid-template-columns:300px minmax(0,1fr);gap:34px;align-items:start}
+  .setlayout .setnav{position:sticky;top:24px}
+  .setlayout>.col{max-width:780px}
+}
+@media (min-width:1024px) and (hover:hover){
+  .brow:hover,.cyc summary:hover{background:var(--surface-2)}
+  .day:not(.blank):hover{box-shadow:3px 3px 0 var(--shadow)}
+  .chip:hover,.setitem:hover,.navb:not([disabled]):hover{transform:translate(-1px,-1px)}
+}
+</style>
+
+<div class="wrap" id="app"></div>
+
+<script>
+/*LOGIC_START*/
+const KEY='billbuffer.v1';
+const SERVER_MODE=/*SERVER_MODE*/false;
+const BUILD='/*BUILD*/preview';
+const D=(y,m,d)=>Math.floor(Date.UTC(y,m,d)/864e5);
+const ymd=n=>{const t=new Date(n*864e5);return [t.getUTCFullYear(),t.getUTCMonth(),t.getUTCDate()];};
+const daysInMonth=(y,m)=>new Date(Date.UTC(y,m+1,0)).getUTCDate();
+const parseISO=s=>{const m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);return m?D(+m[1],+m[2]-1,+m[3]):null;};
+const toISO=n=>new Date(n*864e5).toISOString().slice(0,10);
+const dow=n=>new Date(n*864e5).getUTCDay();
+function today(){const t=new Date();return D(t.getFullYear(),t.getMonth(),t.getDate());}
+function addMonths(n,k,dom){const [y,m,d]=ymd(n);const t=m+k;const yy=y+Math.floor(t/12),mm=((t%12)+12)%12;return D(yy,mm,Math.min(dom||d,daysInMonth(yy,mm)));}
+const median=a=>{const s=a.slice().sort((x,y)=>x-y);const h=s.length>>1;return s.length%2?s[h]:(s[h-1]+s[h])/2;};
+
+const CADS=[['weekly','Weekly'],['fortnightly','Every 2 weeks'],['monthly','Monthly'],['quarterly','Every 3 months'],['yearly','Yearly']];
+const PER_YEAR={weekly:365.25/7,fortnightly:365.25/14,monthly:12,quarterly:4,yearly:1};
+const DEFAULT_CATS=()=>[{id:'housing',name:'Housing',color:0},{id:'utilities',name:'Utilities',color:1},{id:'insurance',name:'Insurance',color:2},{id:'subs',name:'Subscriptions',color:3},{id:'other',name:'Other',color:4}];
+function guessCategory(n){
+  const s=String(n).toUpperCase();
+  if(/RENT|MORTGAGE|STRATA|COUNCIL|RATES|HOME LOAN/.test(s))return 'housing';
+  if(/ENERGY|ELECTRIC|\bGAS\b|WATER|ORIGIN|\bAGL\b|ALINTA|\bNBN\b|BROADBAND|TELSTRA|OPTUS|VODAFONE|INTERNET|MOBILE|PHONE|\bTPG\b|IINET|AMAYSIM|BELONG/.test(s))return 'utilities';
+  if(/INSUR|MEDIBANK|BUPA|\bNIB\b|\bHCF\b|\bAHM\b|AAMI|NRMA|RACV|RACQ|ALLIANZ|BUDGET DIRECT|YOUI|SUNCORP|\bGIO\b|REGO|REGISTRATION/.test(s))return 'insurance';
+  if(/NETFLIX|SPOTIFY|\bSTAN\b|DISNEY|AMAZON|APPLE|GOOGLE|YOUTUBE|BINGE|KAYO|FOXTEL|\bGYM\b|FITNESS|ANYTIME|PATREON|MICROSOFT|ADOBE|DROPBOX|PARAMOUNT/.test(s))return 'subs';
+  return 'other';
+}
+
+const DEFAULT_PEOPLE=()=>[{id:'p1',name:'You',nextPayday:'',freq:'fortnightly',payIn:''},{id:'p2',name:'Partner',nextPayday:'',freq:'fortnightly',payIn:''}];
+const FREQ={weekly:{label:'Weekly',days:7,per:365.25/7},fortnightly:{label:'Fortnightly',days:14,per:365.25/14},'4weekly':{label:'Every 4 weeks',days:28,per:365.25/28},monthly:{label:'Monthly',per:12}};
+const freqFromDays=n=>+n===7?'weekly':+n===28?'4weekly':'fortnightly';
+let S=null;
+const defaults=()=>({v:2,example:false,settings:{buffer:200,balance:'',autoStrip:false},categories:DEFAULT_CATS(),people:DEFAULT_PEOPLE(),bills:[],hidden:[],notDup:[],txns:[],files:[],paid:{d:0,ids:[]},meta:{lastBackup:null,changed:null}});
+
+/* ---------- CSV reading ---------- */
+function parseCSV(text){
+  text=text.replace(/^﻿/,'');
+  const first=text.split(/\r?\n/,1)[0]||'';
+  const cnt=ch=>first.split(ch).length-1;
+  const delim=(cnt('\t')>cnt(',')&&cnt('\t')>cnt(';'))?'\t':(cnt(';')>cnt(',')?';':',');
+  const rows=[];let row=[],cur='',q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=c; }
+    else if(c==='"') q=true;
+    else if(c===delim){row.push(cur);cur='';}
+    else if(c==='\n'||c==='\r'){ if(c==='\r'&&text[i+1]==='\n')i++; row.push(cur);cur='';rows.push(row);row=[]; }
+    else cur+=c;
+  }
+  if(cur!==''||row.length){row.push(cur);rows.push(row);}
+  return rows;
+}
+function parseAmt(s){
+  if(s==null)return null;let t=String(s).trim();if(!t)return null;let neg=false;
+  if(/^\(.*\)$/.test(t)){neg=true;t=t.slice(1,-1);}
+  if(/dr$/i.test(t)){neg=true;t=t.replace(/dr$/i,'');}
+  t=t.replace(/cr$/i,'');
+  if(/-$/.test(t)){neg=true;t=t.slice(0,-1);}
+  t=t.replace(/[$,\s]/g,'');
+  if(t[0]==='-'){neg=true;t=t.slice(1);} else if(t[0]==='+')t=t.slice(1);
+  if(!/^\d+(\.\d+)?$/.test(t))return null;
+  const v=parseFloat(t);return neg?-v:v;
+}
+const MON={jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+function valid(y,m,d){if(m<0||m>11||d<1||d>daysInMonth(y,m))return null;return D(y,m,d);}
+function parseDate(s,order){
+  s=String(s||'').trim();let m;
+  if((m=s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/)))return valid(+m[1],+m[2]-1,+m[3]);
+  if((m=s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/))){let y=+m[3];if(y<100)y+=2000;const a=+m[1],b=+m[2];return order==='mdy'?valid(y,a-1,b):valid(y,b-1,a);}
+  if((m=s.match(/^(\d{1,2})[ -]([A-Za-z]{3})[A-Za-z]*[ ,-]+(\d{2,4})/))){const mo=MON[m[2].toLowerCase()];if(mo==null)return null;let y=+m[3];if(y<100)y+=2000;return valid(y,mo,+m[1]);}
+  return null;
+}
+function detectOrder(vals){
+  let dmy=false,mdy=false;
+  vals.forEach(v=>{const m=String(v).trim().match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-]\d{2,4}/);if(m){if(+m[1]>12)dmy=true;if(+m[2]>12)mdy=true;}});
+  return (mdy&&!dmy)?'mdy':'dmy';
+}
+function extract(text){
+  const rows=parseCSV(text).filter(r=>r.some(c=>String(c).trim()));
+  if(rows.length<2)return {err:'No rows found.'};
+  const head=rows[0].map(c=>String(c).trim().toLowerCase());
+  const hasHeader=!rows[0].some(c=>parseDate(c)!=null)&&head.some(c=>/date|desc|amount|debit|credit|narr|detail|balance/.test(c));
+  const body=hasHeader?rows.slice(1):rows;
+  const ci={};
+  if(hasHeader){
+    head.forEach((c,i)=>{
+      if(/balance/.test(c))return;
+      if(/date/.test(c)){if(ci.date==null||(/^value/.test(head[ci.date])&&!/^value/.test(c)))ci.date=i;return;}
+      if(ci.debit==null&&/debit|withdraw|money out|paid out/.test(c))ci.debit=i;
+      else if(ci.credit==null&&/credit|deposit|money in|paid in/.test(c))ci.credit=i;
+      else if(ci.amount==null&&/amount|value/.test(c))ci.amount=i;
+      else if(ci.desc==null&&/desc|detail|narr|payee|memo|particulars|reference/.test(c))ci.desc=i;
+    });
+  } else {
+    const sample=body.slice(0,15);const n=rows[0].length;const stat=[];
+    for(let j=0;j<n;j++){
+      const vals=sample.map(r=>r[j]);
+      stat.push({j,date:vals.filter(v=>parseDate(v)!=null).length/vals.length,num:vals.filter(v=>parseDate(v)==null&&parseAmt(v)!=null).length/vals.length,len:vals.reduce((a,v)=>a+String(v||'').length,0)/vals.length});
+    }
+    const dc=stat.filter(s=>s.date>=.8).sort((a,b)=>b.date-a.date)[0];
+    if(dc)ci.date=dc.j;
+    const nums=stat.filter(s=>s.num>=.8);
+    if(nums.length)ci.amount=nums[0].j;
+    const txt=stat.filter(s=>s.j!==ci.date&&!nums.includes(s)).sort((a,b)=>b.len-a.len)[0];
+    if(txt)ci.desc=txt.j;
+  }
+  if(ci.date==null)return {err:"Couldn't find a date column."};
+  if(ci.amount==null&&ci.debit==null)return {err:"Couldn't find an amount or debit column."};
+  const order=detectOrder(body.map(r=>r[ci.date]));
+  const parsed=[];
+  body.forEach(r=>{
+    const d=parseDate(r[ci.date],order);if(d==null)return;
+    let desc=ci.desc!=null?String(r[ci.desc]||'').trim():'';
+    if(!desc)desc=r.filter((c,i)=>i!==ci.date&&i!==ci.amount&&i!==ci.debit&&i!==ci.credit&&parseAmt(c)==null).join(' ').trim();
+    let v=null;
+    if(ci.debit!=null){const dv=parseAmt(r[ci.debit]);if(dv)v=-Math.abs(dv);else if(ci.credit!=null&&parseAmt(r[ci.credit]))v=Math.abs(parseAmt(r[ci.credit]));else v=0;}
+    else v=parseAmt(r[ci.amount]);
+    if(v==null)return;
+    parsed.push({d,t:desc,v});
+  });
+  if(!parsed.length)return {err:'No dated rows could be read.'};
+  const anyNeg=parsed.some(p=>p.v<0);
+  const txns=parsed.filter(p=>anyNeg?p.v<0:p.v>0).map(p=>({d:p.d,t:p.t,a:Math.abs(p.v)}));
+  if(!txns.length)return {err:'No payments out found.'};
+  return {txns,unsigned:!anyNeg};
+}
+function mergeTxns(newT){
+  const key=t=>t.d+'|'+t.a.toFixed(2)+'|'+t.t;
+  const have={};S.txns.forEach(t=>{have[key(t)]=(have[key(t)]||0)+1;});
+  const inc={};newT.forEach(t=>{(inc[key(t)]=inc[key(t)]||[]).push(t);});
+  let added=0;
+  for(const k in inc){const need=inc[k].length-(have[k]||0);for(let i=0;i<need;i++){S.txns.push(inc[k][i]);added++;}}
+  return added;
+}
+
+/* ---------- finding recurring bills ---------- */
+const STOP=new Set('VISA PURCHASE DEBIT DIRECT EFTPOS CARD AUS AU PAYMENT BPAY TRANSFER ONLINE INTERNET FROM TO VALUE DATE PTY LTD THE PAY REF RECEIPT AUTH PENDING EFT POS AUSTRALIA NSW VIC QLD WA SA TAS ACT NT MELBOURNE SYDNEY IN OSKO INTERNAL JAN FEB MAR APR MAY JUN JUL AUG SEP SEPT OCT NOV DEC MON TUE WED THU FRI SAT SUN'.split(' '));
+const SKIP=/\b(SALARY|WAGES|PAYROLL|INTEREST|REFUND)\b|ROUND UP/;
+/* The payee part of a bank description. Many banks write "Payee - Type - Receipt 123 ...",
+   so only the part before the first " - " is used. Transfers to the same account number
+   are grouped by that account, whatever the description says. */
+function payeeHead(s){s=String(s);return s.includes(' - ')?s.split(' - ')[0]:s;}
+function payeeKey(s){
+  const m=String(s).match(/\bto\s+(\d{6})\s+(\d{5,10})\b/i);
+  if(m)return 'ACCT '+m[1]+m[2];
+  return norm(payeeHead(s));
+}
+function cleanName(s){
+  const w=String(s).replace(/\.{2,}|…/g,' ').replace(/[^A-Za-z0-9&' ]+/g,' ').split(/\s+/).filter(x=>x&&!/\d/.test(x));
+  return w.slice(0,5).join(' ').toUpperCase();
+}
+function norm(s){
+  const w=String(s).toUpperCase().replace(/[^A-Z0-9 ]+/g,' ').split(/\s+/).filter(x=>x.length>1&&!/\d/.test(x)&&!STOP.has(x));
+  return w.slice(0,3).join(' ');
+}
+const titleCase=s=>s.toLowerCase().replace(/\b\w/g,c=>c.toUpperCase());
+const monthKey=d=>{const [y,m]=ymd(d);return y*12+m;};
+const ordn=n=>{const v=n%100;if(v>=11&&v<=13)return n+'th';return n+(({1:'st',2:'nd',3:'rd'})[n%10]||'th');};
+function cadFromGap(med){return med<=9?'weekly':med<=17?'fortnightly':med<=45?'monthly':med<=120?'quarterly':'yearly';}
+function mkSeries(arr){
+  if(arr.length<2)return null;
+  const gaps=[];for(let i=1;i<arr.length;i++){const x=arr[i].d-arr[i-1].d;if(x>0)gaps.push(x);}
+  if(!gaps.length)return null;
+  const med=median(gaps);let cad=null;
+  if(med>=6&&med<=8)cad='weekly';else if(med>=12&&med<=16)cad='fortnightly';else if(med>=26&&med<=35)cad='monthly';
+  if(!cad)return null;
+  return {cad,ok:gaps.filter(x=>Math.abs(x-med)<=Math.max(2,med*.2)).length/gaps.length};
+}
+/* Turns a set of payments into a bill's numbers: amount (highest), timing, spread. */
+function seriesFields(arr,cad){
+  arr=arr.slice().sort((a,b)=>a.d-b.d);
+  const amts=arr.map(t=>t.a),mx=Math.max(...amts),mn=Math.min(...amts),spread=mx>0?(mx-mn)/mx:0;
+  if(!cad){const g=[];for(let i=1;i<arr.length;i++)if(arr[i].d>arr[i-1].d)g.push(arr[i].d-arr[i-1].d);cad=g.length?cadFromGap(median(g)):'monthly';}
+  // Banks move debits a day or two around weekends. Use the earliest day a bill has actually
+  // come out, so it is never counted after a payday it could land before.
+  const last=arr[arr.length-1].d;let anchor=last;
+  const step=cad==='weekly'?7:cad==='fortnightly'?14:0;
+  // Only a day or two earlier than the usual day counts; one-off late or early payments are ignored.
+  const earliest=(vals)=>{const m=Math.round(median(vals)),need=Math.max(1,Math.ceil(vals.length*.25));
+    return Math.min(m,...vals.filter(v=>v>=m-2&&v<=m&&vals.filter(x=>x===v).length>=need));};
+  if(step){const offs=arr.map(t=>{let o=((t.d-last)%step+step)%step;if(o>step/2)o-=step;return o;});anchor=last+earliest(offs);}
+  const doms=arr.map(t=>ymd(t.d)[2]);
+  const dom=Math.max(...doms)-Math.min(...doms)<=10?earliest(doms):Math.round(median(doms));
+  return {amount:Math.round(mx*100)/100,min:mn,max:mx,cadence:cad,anchor:toISO(anchor),
+    dom,variable:spread>.03,irregular:spread>.4,seen:arr.length,txs:arr.map(t=>({d:t.d,a:t.a}))};
+}
+function clusterBy(arr,val,close){
+  const s=arr.slice().sort((x,y)=>val(x)-val(y));const out=[];let cur=[s[0]];
+  for(let i=1;i<s.length;i++){if(close(val(s[i-1]),val(s[i])))cur.push(s[i]);else{out.push(cur);cur=[s[i]];}}
+  out.push(cur);return out.map(c=>c.sort((x,y)=>x.d-y.d));
+}
+let detectName='';
+function autoBill(key,suffix,label,arr,cad,extra){
+  const f=seriesFields(arr,cad);
+  return Object.assign({id:'d:'+key+(suffix?'|'+suffix:''),grp:key,gname:detectName,name:detectName+(label?' · '+label:''),src:'auto',include:true},f,extra||{});
+}
+function detect(txns){
+  const g={};
+  txns.forEach(t=>{const k=payeeKey(t.t);if(k&&!SKIP.test(k)&&!SKIP.test(norm(payeeHead(t.t))))(g[k]=g[k]||[]).push(t);});
+  const out=[];
+  for(const k in g){
+    const nc={};g[k].forEach(t=>{const n=cleanName(payeeHead(t.t));if(n)nc[n]=(nc[n]||0)+1;});
+    detectName=titleCase(Object.entries(nc).sort((a,b)=>b[1]-a[1])[0]?.[0]||k);
+    const arr=g[k].slice().sort((a,b)=>a.d-b.d);if(arr.length<2)continue;
+    const span=arr[arr.length-1].d-arr[0].d+1,months=new Set(arr.map(t=>monthKey(t.d))).size;
+    const perMonth=(arr.length-1)/Math.max(1,(arr[arr.length-1].d-arr[0].d)/30.44);
+    const amts=arr.map(t=>t.a),spread=(Math.max(...amts)-Math.min(...amts))/Math.max(...amts);
+    const whole=mkSeries(arr);
+    const gapsAll=[];for(let i=1;i<arr.length;i++)gapsAll.push(arr[i].d-arr[i-1].d);
+    const exact=whole&&(whole.cad==='weekly'||whole.cad==='fortnightly')&&gapsAll.every(x=>Math.abs(x-(whole.cad==='weekly'?7:14))<=1);
+    const byDay=perMonth>=1.5&&!exact?clusterBy(arr,t=>ymd(t.d)[2],(a,b)=>b-a<=3).filter(c=>{const ms=new Set(c.map(t=>monthKey(t.d))).size;return c.length>=2&&ms>=2&&ms>=c.length*.8;}):[];
+    const covDay=byDay.reduce((n,c)=>n+c.length,0)/arr.length;
+    // 0. payments that land on set days each month (1st and 15th, or the 5th and 19th)
+    if(byDay.length>=2&&covDay>=.7){byDay.forEach(c=>{const dm=Math.round(median(c.map(t=>ymd(t.d)[2])));out.push(autoBill(k,'d'+dm,'around the '+ordn(dm),c,'monthly'));});continue;}
+    // 1. one clean bill: same amount, regular timing
+    if(whole&&whole.ok>=.8&&spread<=.03){out.push(autoBill(k,'','',arr,whole.cad));continue;}
+    // 1b. same amount, paid about once a week or fortnight even if the day moves around
+    if(spread<=.03&&arr.length>=4){
+      const span7=span/7,per=arr.length;
+      if(per/span7>=.8&&per/span7<=1.25){out.push(autoBill(k,'','',arr,'weekly'));continue;}
+      if(per/(span/14)>=.8&&per/(span/14)<=1.25){out.push(autoBill(k,'','',arr,'fortnightly'));continue;}
+    }
+    // 2. several bills told apart by amount (e.g. $250 and $180 each month)
+    const byAmt=clusterBy(arr,t=>t.a,(a,b)=>b-a<=Math.max(2,a*.08)).map(c=>({c,s:mkSeries(c)})).filter(x=>x.s&&x.s.ok>=.6);
+    const covAmt=byAmt.reduce((n,x)=>n+x.c.length,0)/arr.length;
+    if(byAmt.length>=2&&covAmt>=.7){byAmt.forEach(x=>{const m=Math.round(median(x.c.map(t=>t.a)));out.push(autoBill(k,'a'+m,'$'+m,x.c,x.s.cad));});continue;}
+    // 4. one bill with amounts that move around (e.g. electricity)
+    if(whole&&whole.ok>=.6&&perMonth<1.5){out.push(autoBill(k,'','',arr,whole.cad));continue;}
+    // 5. one regular bill plus the odd extra payment
+    if(byAmt.length>=1&&covAmt>=.5){byAmt.forEach(x=>{const m=Math.round(median(x.c.map(t=>t.a)));out.push(autoBill(k,'a'+m,'$'+m,x.c,x.s.cad));});continue;}
+    // 6. lots of payments that don't line up: budget the biggest monthly total
+    if(perMonth>=1.5&&months>=2){
+      const tot=new Map();arr.forEach(t=>{const m=monthKey(t.d);tot.set(m,(tot.get(m)||0)+t.a);});
+      const mx=Math.max(...tot.values());
+      out.push(autoBill(k,'total','monthly total',arr,'monthly',{amount:Math.round(mx*100)/100,dom:ymd(arr[arr.length-1].d)[2],variable:true,irregular:true,include:true,total:true}));
+      continue;
+    }
+    if(whole&&whole.ok>=.6)out.push(autoBill(k,'','',arr,whole.cad));
+  }
+  return out;
+}
+const grpOf=b=>b.grp||(String(b.id).startsWith('d:')?String(b.id).slice(2).split('|')[0]:null);
+function redetect(){
+  const found=detect(S.txns);
+  const ids=new Set(S.categories.map(c=>c.id));
+  const kept=S.bills.filter(b=>b.src!=='auto'||b.locked);
+  const keptById=new Map(kept.map(b=>[b.id,b]));
+  const old=new Map(S.bills.filter(b=>b.src==='auto').map(b=>[b.id,b]));
+  const oldByGrp=new Map();S.bills.forEach(b=>{const g=grpOf(b);if(g&&!oldByGrp.has(g))oldByGrp.set(g,b);});
+  const hidden=new Set(S.hidden);
+  // a payee you've split by hand, or kept as one edited bill, isn't re-split automatically
+  const handled=new Set();
+  kept.forEach(b=>{const g=grpOf(b);if(g&&(b.src==='manual'||b.id==='d:'+g))handled.add(g);});
+  S.hidden.forEach(id=>{if(id.startsWith('d:')&&!id.includes('|'))handled.add(id.slice(2));});
+  const fresh=[];
+  found.forEach(f=>{
+    const k=keptById.get(f.id);
+    if(k){Object.assign(k,{min:f.min,max:f.max,seen:f.seen,variable:f.variable,irregular:f.irregular,txs:f.txs,grp:f.grp});
+      const lastTx=Math.max(...f.txs.map(x=>x.d));if(!k.userDates&&parseISO(k.anchor)<=lastTx)Object.assign(k,{anchor:f.anchor,dom:f.dom,cadence:f.cadence});return;}
+    if(hidden.has(f.id)||handled.has(f.grp))return;
+    const o=old.get(f.id),og=oldByGrp.get(f.grp),gc=guessCategory(f.name);
+    if(o)f.include=o.include;
+    f.owner=(o&&o.owner)||'';
+    const oc=(o&&o.category)||(og&&og.category);
+    f.category=oc&&ids.has(oc)?oc:(ids.has(gc)?gc:'other');
+    fresh.push(f);
+  });
+  S.bills=fresh.concat(kept);
+}
+
+/* ---------- when each bill falls due ---------- */
+function occurrences(b,from,to){
+  const out=[];const a=parseISO(b.anchor);if(a==null)return out;
+  if(b.cadence==='weekly'||b.cadence==='fortnightly'){
+    const step=b.cadence==='weekly'?7:14;
+    let d=a+Math.ceil((from-a)/step)*step;
+    for(;d<to;d+=step)out.push(d);
+  } else {
+    const step=b.cadence==='quarterly'?3:b.cadence==='yearly'?12:1;
+    const dom=b.dom||ymd(a)[2];const [ay,am]=ymd(a),[fy,fm]=ymd(from);
+    const k=Math.floor(((fy-ay)*12+(fm-am))/step)-1;
+    for(let i=k;i<k+2000;i++){const d=addMonths(a,i*step,dom);if(d>=to)break;if(d>=from)out.push(d);}
+  }
+  return out;
+}
+const nextDue=(b,t)=>occurrences(b,t,t+800)[0];
+/* Amount changes. Each sets a new amount from a date, either until an end date (a change for
+   a set period) or from then on (a permanent change, like a rent increase). If changes overlap,
+   the one that started most recently applies. */
+function amtOn(b,d){
+  let a=b.amount,best=-Infinity;
+  (b.changes||[]).forEach(c=>{const f=parseISO(c.from),u=c.until?parseISO(c.until):null;
+    if(f!=null&&f<=d&&(u==null||d<=u)&&f>=best){best=f;a=c.amount;}});
+  return a;
+}
+const annualOn=(b,d)=>amtOn(b,d)*(PER_YEAR[b.cadence]||12);
+/* Once a permanent change has started it becomes the bill's usual amount, and changes that can no
+   longer apply (ended, or replaced by a later permanent change) are dropped. Amounts on every
+   date from today on stay exactly the same. */
+function foldChanges(b,t){
+  const cs=b.changes||[];
+  if(!cs.some(c=>!c.until&&parseISO(c.from)<=t))return {amount:b.amount,changes:cs.filter(c=>!c.until||parseISO(c.until)>=t)};
+  // the permanent change in force today is the one amtOn would pick: latest start, later in the list on a tie
+  let p=null,pi=-1;cs.forEach((c,i)=>{if(!c.until&&parseISO(c.from)<=t&&(p==null||parseISO(c.from)>=parseISO(p.from))){p=c;pi=i;}});
+  const pf=parseISO(p.from);
+  return {amount:p.amount,changes:cs.filter((c,i)=>{const f=parseISO(c.from);return (f>pf||(f===pf&&i>pi))&&(!c.until||parseISO(c.until)>=t);})};
+}
+function foldAll(){const t=today();S.bills.forEach(b=>{if(!(b.changes||[]).length)return;const r=foldChanges(b,t);b.amount=r.amount;b.changes=r.changes;});}
+function changeNote(b,t){
+  const cs=(b.changes||[]).map(c=>({...c,f:parseISO(c.from),u:c.until?parseISO(c.until):null})).filter(c=>c.f!=null&&(c.u==null||c.u>=t)).sort((x,y)=>x.f-y.f);
+  const active=cs.filter(c=>c.f<=t&&c.u!=null).pop();
+  if(active)return `${f2(active.amount)} until ${fmtShort(active.u)}`;
+  const next=cs.find(c=>c.f>t);
+  if(next)return `${f2(next.amount)} from ${fmtShort(next.f)}${next.u!=null?' to '+fmtShort(next.u):''}`;
+  return '';
+}
+const balanceVal=()=>{const b=S.settings.balance;return (b===''||b==null||isNaN(+b))?null:+b;};
+
+/* ---------- double-ups ---------- */
+function nameWords(s){return String(s).toUpperCase().replace(/[^A-Z ]+/g,' ').split(/\s+/).filter(x=>x.length>=4&&!STOP.has(x));}
+function findDups(t){
+  const act=S.bills.filter(b=>b.include&&b.amount>0);
+  const nd=new Map(act.map(b=>[b.id,nextDue(b,t)]));
+  const skip=new Set(S.notDup);const res=new Map();
+  const key=(a,b)=>[a.id,b.id].sort().join('~');
+  for(let i=0;i<act.length;i++)for(let j=i+1;j<act.length;j++){
+    const a=act[i],b=act[j],k=key(a,b);if(skip.has(k))continue;
+    if(grpOf(a)&&grpOf(a)===grpOf(b))continue;
+    const hi=Math.max(a.amount,b.amount);
+    const sameAmt=Math.abs(a.amount-b.amount)<=Math.max(1,hi*.03);
+    const da=nd.get(a.id),db=nd.get(b.id);const near=da!=null&&db!=null&&Math.abs(da-db)<=4;
+    const wb=new Set(nameWords(b.name));const sameName=nameWords(a.name).some(x=>wb.has(x));
+    let why=null;
+    if(a.cadence===b.cadence&&sameAmt&&near)why='same amount, due around the same day';
+    else if(a.cadence===b.cadence&&sameName&&(near||Math.abs(a.amount-b.amount)<=hi*.25))why='similar name';
+    if(why){if(!res.has(a.id))res.set(a.id,{other:b,why,key:k});if(!res.has(b.id))res.set(b.id,{other:a,why,key:k});}
+  }
+  return res;
+}
+
+/* ---------- the plan ---------- */
+function payDates(x,from,to){
+  const a=parseISO(x.nextPayday);if(a==null)return [];
+  const f=FREQ[x.freq]||FREQ.fortnightly;
+  if(!f.days)return occurrences({cadence:'monthly',anchor:x.nextPayday,dom:ymd(a)[2]},from,to);
+  const out=[];for(let d=a+Math.ceil((from-a)/f.days)*f.days;d<to;d+=f.days)out.push(d);return out;
+}
+/* Bills due today that you have ticked as already out of the account. Only holds for the day it was ticked. */
+const goneToday=(id,t)=>!!(S.paid&&S.paid.d===t&&S.paid.ids.includes(id));
+function computePlan(){
+  const t=today(),s=S.settings,buf=Math.max(0,+s.buffer||0),end=t+366,FN=365.25/14;
+  const act=S.bills.filter(b=>b.include&&(b.amount>0||(b.changes||[]).length));
+  const ids=new Set(S.categories.map(c=>c.id));
+  const cat=new Map(S.categories.map(c=>[c.id,0]));
+  act.forEach(b=>{const c=ids.has(b.category)?b.category:'other';cat.set(c,(cat.get(c)||0)+annualOn(b,t)/FN);});
+  const perFn=[...cat.values()].reduce((a,b)=>a+b,0);
+  const catRows=S.categories.map(c=>({c,v:cat.get(c.id)||0})).filter(r=>r.v>0).sort((a,b)=>b.v-a.v);
+  const ppl=S.people,pids=new Set(ppl.map(x=>x.id));
+  const unassigned=act.filter(b=>!pids.has(b.owner));
+  // Each payday, a person puts in what their bills cost per pay, using the amount of each bill's
+  // next payment from that day. A planned change shows up in the pay-ins before it's due.
+  const people=ppl.map(x=>{
+    const f=FREQ[x.freq]||FREQ.fortnightly,own=act.filter(b=>b.owner===x.id);
+    const perPayOn=d=>own.reduce((n,b)=>{const nd=nextDue(b,d);return n+annualOn(b,nd==null?d:nd);},0)/f.per;
+    const custom=x.payIn!==''&&x.payIn!=null&&!isNaN(+x.payIn),dates=payDates(x,t,end);
+    const amtFor=d=>custom?Math.max(0,+x.payIn):Math.max(0,Math.ceil(perPayOn(d)-1e-9));
+    const next=dates.length?dates[0]:null,perPay=perPayOn(next!=null?next:t),sugg=Math.ceil(perPay-1e-9),payIn=amtFor(next!=null?next:t);
+    let nextChange=null;for(const d of dates){if(d>t+120)break;const a=amtFor(d);if(a!==payIn){nextChange={d,amt:a};break;}}
+    return {p:x,f,nBills:own.length,perPay,sugg,custom,payIn,amtFor,next,dates,nextChange};
+  });
+  const missing=people.filter(r=>r.next==null).map(r=>r.p.name);
+  const ev=[];
+  // A pay-in due today should already be in the account, so it's part of today's balance
+  // rather than money still on its way.
+  const todayPays=[];
+  people.forEach(r=>r.dates.forEach(d=>{const e={d,pay:true,amt:r.amtFor(d),person:r.p,today:d===t};ev.push(e);if(e.today&&e.amt>0)todayPays.push(e);}));
+  act.forEach(bl=>occurrences(bl,t,end).forEach(d=>{if(d===t&&goneToday(bl.id,t))return;ev.push({d,bl,amt:amtOn(bl,d)});}));
+  ev.sort((a,b)=>a.d-b.d||(a.pay&&!b.pay?-1:b.pay&&!a.pay?1:b.amt-a.amt));
+  // "Right now" covers this pay run and the next one, for everyone: every bill that lands
+  // before the end of each person's next pay run, counting the pay-ins that arrive before then.
+  // Pay-ins stay steady (each person's bills spread over their pay cycle), so weekly bills are
+  // always met by the regular pay-in and monthly ones are counted where they actually land.
+  let until=t+14;
+  people.forEach(r=>{
+    if(!r.dates.length)return;
+    const cyc=r.f.days||31,ds=r.dates;
+    const k=ds[0]===t?2:1;  // paid today: this run started today, so look two paydays on
+    const end=ds[k]!=null?ds[k]:ds[ds.length-1]+cyc*(k-ds.length+1);
+    until=Math.max(until,end);
+  });
+  let net=0,need=buf;
+  ev.forEach(e=>{if(e.d>=until||e.today)return;net+=e.pay?e.amt:-e.amt;if(!e.pay)need=Math.max(need,buf-net);});
+  const required=need,bal=balanceVal(),start=bal!=null?bal:required;
+  // the working behind the figure, step by step
+  const working=[];{let w=required;ev.forEach(e=>{if(e.d>=until||e.today)return;w+=e.pay?e.amt:-e.amt;working.push({e,bal:w});});}
+  const days=new Map();let run=start;
+  ev.forEach(e=>{if(!e.today)run+=e.pay?e.amt:-e.amt;let x=days.get(e.d);if(!x){x={bills:[],pays:[],bal:0};days.set(e.d,x);}(e.pay?x.pays:x.bills).push(e);x.bal=run;});
+  const segs=[];run=start;let idx=0;
+  for(let k=0;k<7;k++){
+    const a=t+k*14,b=a+14,open=run;let low=k===0?open:Infinity,total=0,payIn=0;const items=[];
+    while(idx<ev.length&&ev[idx].d<b){const e=ev[idx++];if(e.today){items.push(e);continue;}run+=e.pay?e.amt:-e.amt;if(e.pay)payIn+=e.amt;else total+=e.amt;items.push(e);if(!e.pay)low=Math.min(low,run);}
+    if(low===Infinity)low=Math.min(open,run);
+    segs.push({start:a,end:b,items,total,payIn,nBills:items.filter(e=>!e.pay).length,open,close:run,low,isNow:k===0});
+  }
+  const avg=segs.reduce((n,g)=>n+g.total,0)/segs.length;
+  segs.forEach(g=>{g.tight=g.total>=avg*1.2&&g.total-avg>=50;});
+  return {t,buf,until,todayPays,working,required,bal,start,segs,days,catRows,perFn,people,missing,unassigned,nAct:act.length,end};
+}
+
+/* ---------- example data shown on first open ---------- */
+function exampleTxns(t){
+  const out=[];const [ty,tm]=ymd(t);
+  const monthly=[['RENT PAYMENT SUNSET PROPERTY',1850,3],['ORIGIN ENERGY ELECTRICITY',[212.4,187.9,241.6,203.1],12],['TELSTRA MOBILE PLAN',65,18],['AUSSIE BROADBAND NBN',89,22],['MEDIBANK HEALTH COVER',214.5,26]];
+  for(let k=-3;k<=0;k++)monthly.forEach(m=>{
+    const d=addMonths(D(ty,tm,1),k,m[2]);
+    if(d<t&&d>=t-95)out.push({d,t:m[0],a:Array.isArray(m[1])?m[1][k+3]:m[1]});
+  });
+  for(let d=t-3;d>=t-95;d-=14)out.push({d,t:'FITNESS FIRST MEMBERSHIP',a:18.95});
+  for(let k=-3;k<=0;k++){[[1,250],[16,180]].forEach(([dm,a])=>{const x=addMonths(D(ty,tm,1),k,dm);if(x<t&&x>=t-95)out.push({d:x,t:'WESTPAC LOAN REPAYMENT',a});});}
+  return out;
+}
+function buildExample(){
+  const t=today();const s=defaults();s.example=true;
+  s.txns=exampleTxns(t);
+  const fri=t+((5-dow(t)+7)%7||7);
+  s.people[0].nextPayday=toISO(fri);s.people[0].freq='fortnightly';
+  {const [yy,mm]=ymd(t);let d15=D(yy,mm,15);if(d15<t)d15=addMonths(d15,1,15);s.people[1].nextPayday=toISO(d15);s.people[1].freq='monthly';}
+  const prev=S;S=s;redetect();S=prev;
+  const [y,m]=ymd(t);let d18=D(y,m,18);if(d18<t)d18=addMonths(d18,1,18);
+  s.bills.forEach(b=>{b.owner=/TELSTRA|RENT|MEDIBANK|WESTPAC/i.test(b.name)?'p1':'p2';if(/WESTPAC/i.test(b.name))b.category='housing';});
+  s.bills.push({id:'m:example-rego',name:'Car rego',amount:890,cadence:'yearly',anchor:toISO(t+40),dom:ymd(t+40)[2],include:true,src:'manual',locked:true,category:'insurance',owner:'p2'});
+  s.bills.push({id:'m:example-phone',name:'Phone plan',amount:65,cadence:'monthly',anchor:toISO(d18),dom:18,include:true,src:'manual',locked:true,category:'utilities',owner:'p1'});
+  return s;
+}
+
+/* ---------- loading and restoring saved data safely ---------- */
+function cleanState(st,keepExample){
+  const d=defaults(),num=x=>typeof x==='number'&&isFinite(x),str=x=>typeof x==='string';
+  if(Array.isArray(st.categories)){
+    const seen=new Set();
+    const cs=st.categories.filter(c=>c&&str(c.id)&&str(c.name)&&c.name.trim()&&!seen.has(c.id)&&seen.add(c.id))
+      .map(c=>({id:c.id,name:c.name.trim().slice(0,40),color:num(c.color)?Math.abs(Math.round(c.color))%8:4}));
+    if(cs.length)d.categories=cs;
+  }
+  if(!d.categories.some(c=>c.id==='other'))d.categories.push({id:'other',name:'Other',color:4});
+  if(Array.isArray(st.people)){
+    const seenP=new Set();
+    d.people=st.people.filter(x=>x&&str(x.id)&&x.id!=='shared'&&str(x.name)&&x.name.trim()&&!seenP.has(x.id)&&seenP.add(x.id))
+      .map(x=>({id:x.id,name:x.name.trim().slice(0,30),
+        nextPayday:parseISO(x.nextPayday)!=null?x.nextPayday:'',freq:FREQ[x.freq]?x.freq:'',payIn:(x.payIn===''||x.payIn==null||isNaN(+x.payIn))?'':+x.payIn}));
+    if(!d.people.length)d.people=DEFAULT_PEOPLE();
+  }
+  {const os=st.settings||{};d.people.forEach(x=>{
+    if(!x.nextPayday&&parseISO(os.nextPayday)!=null)x.nextPayday=os.nextPayday;
+    if(!x.freq||(!Array.isArray(st.people)&&os.payDays))x.freq=freqFromDays(os.payDays);
+  });}
+  const pids=new Set(d.people.map(x=>x.id));
+  const ids=new Set(d.categories.map(c=>c.id));
+  d.bills=(Array.isArray(st.bills)?st.bills:[]).filter(b=>b&&str(b.id)&&str(b.name)&&num(b.amount)&&PER_YEAR[b.cadence]&&parseISO(b.anchor)!=null)
+    .map(b=>{const g=guessCategory(b.name);return Object.assign({},b,{
+      include:!!b.include,dom:num(b.dom)?b.dom:ymd(parseISO(b.anchor))[2],src:b.src==='auto'?'auto':'manual',
+      changes:(Array.isArray(b.changes)?b.changes:[]).filter(c=>c&&num(+c.amount)&&+c.amount>=0&&parseISO(c.from)!=null&&(!c.until||(parseISO(c.until)!=null&&parseISO(c.until)>=parseISO(c.from))))
+        .map(c=>({id:str(c.id)?c.id:'c'+Math.random().toString(36).slice(2,8),amount:+c.amount,from:c.from,until:c.until||null})),
+      txs:Array.isArray(b.txs)?b.txs.filter(t=>t&&num(t.d)&&num(t.a)).map(t=>({d:t.d,a:t.a})):[],grp:str(b.grp)?b.grp:(grpOf(b)||undefined),
+      locked:!!(b.locked||b.edited||b.src!=='auto'),owner:pids.has(b.owner)?b.owner:'',category:ids.has(b.category)?b.category:(ids.has(g)?g:'other')});});
+  d.hidden=(Array.isArray(st.hidden)?st.hidden:[]).filter(str);
+  d.notDup=(Array.isArray(st.notDup)?st.notDup:[]).filter(str);
+  d.txns=(Array.isArray(st.txns)?st.txns:[]).filter(t=>t&&num(t.d)&&num(t.a)&&str(t.t));
+  d.files=(Array.isArray(st.files)?st.files:[]).filter(f=>f&&str(f.name)&&num(f.from)&&num(f.to)).map(f=>({name:f.name,from:f.from,to:f.to,rows:num(f.rows)?f.rows:0,added:num(f.added)?f.added:0}));
+  // older saves kept one payday in settings; it was moved onto each person above
+  const s=st.settings||{};
+  d.settings={buffer:num(+s.buffer)&&+s.buffer>=0?+s.buffer:200,balance:(s.balance===''||s.balance==null||isNaN(+s.balance))?'':+s.balance,autoStrip:!!s.autoStrip};
+  {const p=st.paid||{};d.paid={d:num(p.d)?p.d:0,ids:(Array.isArray(p.ids)?p.ids:[]).filter(str)};}
+  const m=st.meta||{};d.meta={lastBackup:str(m.lastBackup)?m.lastBackup:null,changed:num(m.changed)?m.changed:null};
+  d.example=keepExample?!!st.example:false;
+  return d;
+}
+/*LOGIC_END*/
+
+/* The plan is worked out once per screen draw and reused by every part of that screen. */
+let planMemo=null;const plan=()=>planMemo||(planMemo=computePlan());
+
+/* ---------- storage ---------- */
+function load(){try{const raw=localStorage.getItem(KEY);if(raw){const o=JSON.parse(raw);if(o&&o.settings&&Array.isArray(o.bills))return cleanState(o,true);}}catch(e){}return null;}
+function persist(touch){
+  planMemo=null;
+  if(touch!==false){S.meta.changed=Date.now();foldAll();}
+  if(SERVER_MODE){if(touch!==false&&typeof Sync!=='undefined'&&Sync&&Sync.mode==='on')queuePush();return;}
+  try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}
+}
+if(SERVER_MODE){try{localStorage.removeItem(KEY);}catch(e){}S=defaults();}
+else{S=load();if(!S){S=buildExample();persist(false);}else persist(false);}
+
+/* ---------- formatting ---------- */
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const nf=o=>new Intl.NumberFormat('en-AU',Object.assign({style:'currency',currency:'AUD'},o));
+const F2=nf({}),F0=nf({maximumFractionDigits:0,minimumFractionDigits:0});
+const f2=n=>F2.format(n);
+const f0=n=>F0.format(Math.round(n)||0);
+const up=n=>f0(Math.ceil(n-1e-9)||0);
+const down=n=>f0(Math.floor(n+1e-9)||0);
+const fk=n=>n>=1000?'$'+(n/1000).toFixed(n>=10000?0:1).replace(/\.0$/,'')+'k':'$'+Math.round(n);
+const fmtDay=n=>new Date(n*864e5).toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short',timeZone:'UTC'});
+const fmtShort=n=>new Date(n*864e5).toLocaleDateString('en-AU',{day:'numeric',month:'short',timeZone:'UTC'});
+const fmtLong=n=>new Date(n*864e5).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'});
+const fmtFull=n=>new Date(n*864e5).toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long',timeZone:'UTC'});
+const fmtMonth=(y,m)=>new Date(Date.UTC(y,m,1)).toLocaleDateString('en-AU',{month:'long',year:'numeric',timeZone:'UTC'});
+const poss=n=>n==='You'?'Your':n+(/s$/i.test(n)?"'":"'s");
+const plural=(n,w,pl)=>n+' '+(n===1?w:(pl||w+'s'));
+function ago(ts){
+  if(!ts)return null;const t=typeof ts==='number'?ts:Date.parse(ts);if(!t)return null;
+  const m=Math.round((Date.now()-t)/6e4);if(m<1)return 'just now';if(m<60)return plural(m,'minute')+' ago';
+  const h=Math.round(m/60);if(h<24)return plural(h,'hour')+' ago';return plural(Math.round(h/24),'day')+' ago';
+}
+const cadLabel=b=>{const dm=b.dom||ymd(parseISO(b.anchor))[2];
+  return b.cadence==='weekly'?'Weekly':b.cadence==='fortnightly'?'Every 2 weeks':b.cadence==='quarterly'?'Every 3 months':b.cadence==='yearly'?'Yearly':'Monthly on the '+ordn(dm);};
+const catOf=id=>S.categories.find(c=>c.id===id)||S.categories.find(c=>c.id==='other')||{id:'other',name:'Other',color:4};
+const cc=id=>`--cc:var(--k${catOf(id).color%8})`;
+const ownerName=id=>{const x=S.people.find(q=>q.id===id);return x?x.name:'No owner';};
+const hasOwner=b=>S.people.some(x=>x.id===b.owner);
+const putsIn=n=>n==='You'?'You put in':n+' puts in';
+
+/* ---------- view state ---------- */
+let tab='now',msg=null,pendingRestore=null,confirmReset=null,dl=null,clearTimer=null;
+let confirmRecheck=null,editing=null,confirmDel=null,catFilter='all',confirmCat=null,ownFilter='all',confirmPerson=null,editingP=null;
+let calY=null,calM=null,selDay=null;
+const openSeg=new Set();let openWorking=false;
+const $=s=>document.querySelector(s);
+function setMsg(t,text,kind){msg={tab:t,text,kind};}
+function msgHtml(where){return msg&&msg.tab===where?`<div class="msg ${msg.kind||''}" role="status">${esc(msg.text)}</div>`:'';}
+const exampleBanner=()=>S.example?`<section class="banner"><p><strong>These are example bills.</strong> Import a statement or add a bill to start with your own.</p><button class="btn small" data-act="clearExample">Clear examples</button></section>`:'';
+
+/* ---------- Now tab ---------- */
+/* The figure. heroFig and the working are redrawn when numbers change; the balance box between
+   them is left alone so typing in it is never interrupted. */
+function heroHtml(P){
+  return `<section class="hero"><div id="heroFig">${heroFig(P)}</div><div class="hbal"><label for="s-bal">Current balance</label><small>Add it from your banking app to check you're covered.</small>
+    <div class="money"><input id="s-bal" type="number" inputmode="decimal" step="0.01" data-s="balance" value="${esc(S.settings.balance)}" placeholder="Optional"><span aria-hidden="true">$</span></div></div><div id="heroWork">${heroWork(P)}</div></section>`;
+}
+function heroWork(P){
+  if(!P.nAct)return '';
+  const nb=P.working.filter(w=>!w.e.pay),np=P.working.filter(w=>w.e.pay);
+  const low=P.working.reduce((m,w)=>Math.min(m,w.bal),P.required);
+  return `<details class="working" ${openWorking?'open':''}><summary>How this is worked out</summary>
+    <p>${plural(nb.length,'bill')} (${f2(nb.reduce((n,w)=>n+w.e.amt,0))}) and ${plural(np.length,'pay-in')} (${f2(np.reduce((n,w)=>n+w.e.amt,0))}) up to ${esc(fmtDay(P.until-1))}. Starting from ${f2(P.required)}, the lowest the balance gets is ${f2(low)}.</p>
+    <ul class="wlist"><li class="wstart"><span>${esc(fmtShort(P.t))}</span><span>Today${P.todayPays.length?'<small>after '+esc(P.todayPays.map(e=>e.person.name).join(' and '))+(P.todayPays.length===1&&P.todayPays[0].person.name!=='You'?' pays in':' pay in')+'</small>':''}</span><span>${f2(P.required)}</span></li>
+    ${P.working.map(w=>`<li class="${w.e.pay?'win':''} ${Math.abs(w.bal-low)<0.005?'wlow':''}"><span>${esc(fmtShort(w.e.d))}</span><span>${esc(w.e.pay?putsIn(w.e.person.name):w.e.bl.name)}<small>${w.e.pay?'+':'−'}${f2(w.e.amt)}</small></span><span>${f2(w.bal)}</span></li>`).join('')}</ul></details>`;
+}
+function heroFig(P){
+  const sub=P.nAct
+    ?`Covers every bill until ${esc(fmtDay(P.until-1))} and keeps your ${f0(P.buf)} buffer${P.todayPays.length?', counting today\'s pay-ins as already in':''}. Assumes everyone pays in on payday.`
+    :`No bills yet. Import a statement in Settings, or add a bill on the Bills tab.`;
+  let hint='';
+  if(P.bal!=null){
+    const diff=P.bal-P.required;
+    if(diff>=-0.004)hint=`${down(diff)} more than needed.`;
+    else if(P.todayPays.length)hint=`${esc(P.todayPays.length===1?poss(P.todayPays[0].person.name):P.todayPays.map(e=>e.person.name).join(' and ')+"'s")} pay-in due today may not be in yet.`;
+  }
+  const billsPart=Math.max(0,P.required-P.buf),scale=Math.max(P.required,P.bal||0,1);
+  const shortNow=P.bal!=null&&P.bal<P.required-0.004;
+  const gauge=`<div class="gauge" role="img" aria-label="${esc(`${f0(billsPart)} for bills plus ${f0(P.buf)} buffer${P.bal!=null?`, ${f0(P.bal)} in the account`:''}`)}">
+      ${billsPart>0?`<div class="gfill bills" style="width:${(billsPart/scale*100).toFixed(2)}%"></div>`:''}
+      ${P.buf>0?`<div class="gfill buf" style="width:${(P.buf/scale*100).toFixed(2)}%"></div>`:''}
+      ${P.bal!=null?`<div class="gmark ${shortNow?'bad':''}" style="left:${(Math.max(0,Math.min(P.bal,scale))/scale*100).toFixed(2)}%"></div>`:''}</div>
+    <ul class="glegend"><li><i class="k-bills"></i>Bills <b>${f0(billsPart)}</b></li><li><i class="k-buf"></i>Buffer <b>${f0(P.buf)}</b></li>${P.bal!=null?`<li><i class="k-bal ${shortNow?'bad':''}"></i>In account <b>${f0(P.bal)}</b></li>`:''}</ul>`;
+  return `${P.bal!=null?`<span class="hpill ${shortNow?'bad':''}">${shortNow?'Short '+up(P.required-P.bal):'Covered'}</span>`:''}<p class="eyebrow">Should be in the account now</p>
+    <p class="big">${up(P.required)}</p>${gauge}${hint?`<p class="hint">${hint}</p>`:''}<p class="sub">${sub}</p>`;
+}
+function tilesHtml(P){
+  const cols=['c-blue','c-mint','c-lilac','c-sand'],t=[];
+  P.people.forEach((r,i)=>t.push(`<button class="tile ${cols[i%4]}" data-act="ownerBills" data-id="${esc(r.p.id)}" aria-label="See ${esc(poss(r.p.name))} bills">
+    <span class="tl">${esc(putsIn(r.p.name))}</span><span class="tv">${f0(r.payIn)}</span>
+    <span class="ts">${esc(r.f.label)}${r.next===P.t?' · paid today':r.next!=null?' · next '+esc(fmtShort(r.next)):' · no payday set'}${r.nextChange?` · ${f0(r.nextChange.amt)} from ${esc(fmtShort(r.nextChange.d))}`:''}</span></button>`));
+  if(P.working.length){
+    const lw=P.working.reduce((m,w)=>w.bal<m.bal?w:m,P.working[0]);
+    t.push(`<button class="tile c-red" data-act="showWorking"><span class="tl">Tightest day</span><span class="tv">${esc(fmtShort(lw.e.d))}</span><span class="ts">Down to ${f0(lw.bal)} after ${esc(lw.e.pay?(lw.e.person.name==='You'?'your':poss(lw.e.person.name))+' pay-in':lw.e.bl.name)}</span></button>`);
+  }
+  const nb=P.nAct;
+  t.push(P.unassigned.length
+    ?`<button class="tile c-warn" data-act="showUnassigned"><span class="tl">No owner</span><span class="tv">${P.unassigned.length}</span><span class="ts">Tap to choose who pays</span></button>`
+    :`<button class="tile c-white" data-act="tab" data-tab="bills"><span class="tl">Bills</span><span class="tv">${nb}</span><span class="ts">${f0(P.perFn)} a fortnight on average</span></button>`);
+  if(t.length%2)t[t.length-1]=t[t.length-1].replace('class="tile ','class="tile wide ');
+  return `<div class="tiles">${t.join('')}</div>`;
+}
+function todayHtml(P){
+  const t=P.t,rows=S.bills.filter(b=>b.include&&occurrences(b,t,t+1).length).map(b=>({b,gone:goneToday(b.id,t)}));
+  if(!rows.length)return '';
+  const left=rows.filter(r=>!r.gone).reduce((n,r)=>n+amtOn(r.b,t),0);
+  return `<section class="card"><h2>Coming out today</h2><p>Tick a bill once it has left the account, so the figure above stops counting it.</p>
+    <ul class="today">${rows.map(({b,gone})=>`<li><label class="check"><input type="checkbox" data-gone="${esc(b.id)}" ${gone?'checked':''}><span class="tn">${esc(b.name)}<small>${esc(ownerName(b.owner))}</small></span><span class="ta">${f2(amtOn(b,t))}</span></label></li>`).join('')}</ul>
+    <p class="note">${left>0.004?`${f2(left)} still to come out today.`:'Everything due today has gone out.'}</p></section>`;
+}
+function warnHtml(P){
+  const out=[];
+  if(P.missing.length)out.push(`Set a next payday for ${esc(P.missing.join(' and '))} in Settings. Their pay-ins aren't counted until you do.`);
+  if(P.unassigned.length)out.push(`${plural(P.unassigned.length,'bill')} ${P.unassigned.length===1?'has':'have'} no owner, so no one's pay-in covers ${P.unassigned.length===1?'it':'them'}. <button class="btn small" data-act="showUnassigned">Assign owners</button>`);
+  P.people.filter(r=>r.custom&&r.payIn+0.5<r.perPay).forEach(r=>out.push(`${esc(poss(r.p.name))} set amount is ${f2(r.perPay-r.payIn)} a pay short of their bills, so the account will slowly run down.`));
+  return out.length?`<section class="banner">${out.map(x=>`<p>${x}</p>`).join('')}</section>`:'';
+}
+function personEditor(r){
+  const x=r?r.p:null,n=S.people.length;
+  const freqs=Object.entries(FREQ).map(([k,v])=>`<option value="${k}" ${(x?x.freq:'fortnightly')===k?'selected':''}>${v.label}</option>`).join('');
+  return `<div class="editor"><div class="fields">
+    <div class="field wide"><label for="p-name">Name</label><input id="p-name" type="text" maxlength="30" value="${esc(x?x.name:'')}" placeholder="Sam"></div>
+    <div class="field"><label for="p-pay">Next payday</label><input id="p-pay" type="date" value="${esc(x?x.nextPayday:'')}"></div>
+    <div class="field"><label for="p-freq">Paid</label><select id="p-freq">${freqs}</select></div>
+    <div class="field wide"><label for="p-in">Fixed pay-in ($, optional)</label><input id="p-in" type="number" inputmode="decimal" min="0" step="1" value="${x?esc(x.payIn):''}" placeholder="${r?'Auto: '+esc(f0(r.sugg)):'Auto'}"></div>
+  </div><p class="note">Leave the fixed pay-in empty to use what their bills cost each pay.</p>
+  <div class="btnrow"><button class="btn" data-act="psave">${x?'Save':'Add person'}</button><button class="btn ghost" data-act="pcancel">Cancel</button>
+  ${x&&n>1?`<button class="btn danger" data-act="pdel" data-id="${esc(x.id)}">${confirmPerson===x.id?'Tap again to remove':'Remove'}</button>`:''}</div>${msgHtml('person')}</div>`;
+}
+function catHtml(P){
+  if(!P.catRows.length)return '';
+  const mx=Math.max(...P.catRows.map(r=>r.v));
+  return `<section class="card"><h2>Cost per fortnight</h2><p>Average across the year, by category.</p><ul class="catlist">
+    ${P.catRows.map(r=>`<li style="${cc(r.c.id)}"><span class="dot"></span><span class="cn">${esc(r.c.name)}</span><span class="cbar"><i style="width:${(r.v/mx*100).toFixed(1)}%"></i></span><span class="cv">${f2(r.v)}</span></li>`).join('')}
+    <li class="tot"><span></span><span class="cn">Total</span><span></span><span class="cv">${f2(P.perFn)}</span></li></ul></section>`;
+}
+function segHtml(P){
+  const sub=`Lowest balance is the lowest the account gets in each fortnight, starting from ${P.bal!=null?'your current balance':up(P.required)+' today'}.`;
+  const maxT=Math.max(1,...P.segs.map(g=>g.total));
+  const rows=P.segs.map((g,i)=>{
+    let pills='';
+    if(g.isNow)pills+='<span class="pill acc">Now</span>';
+    if(g.tight)pills+='<span class="pill warn">Tight</span>';
+    if(g.low<-0.004)pills+='<span class="pill bad">Overdrawn</span>';
+    else if(g.low<P.buf-0.004)pills+='<span class="pill warn">Below buffer</span>';
+    const items=(g.items.length?g.items.map(e=>e.pay
+        ?`<li class="pay"><span class="d">${esc(fmtDay(e.d))}</span><span class="n">${esc(putsIn(e.person.name))}${e.today?'<small>Paid today, already counted</small>':''}</span><span class="a">+${f2(e.amt)}</span></li>`
+        :`<li><span class="d">${esc(fmtDay(e.d))}</span><span class="n"><i class="dot" style="${cc(e.bl.category)}"></i>${esc(e.bl.name)}<small>${esc(ownerName(e.bl.owner))}</small></span><span class="a">${f2(e.amt)}</span></li>`).join('')
+      :`<li><span class="d"></span><span class="n">Nothing due</span><span class="a"></span></li>`)
+      +`<li class="tot"><span class="d"></span><span class="n">Closing balance</span><span class="a">${f2(g.close)}</span></li>`;
+    return `<details data-i="${i}" ${openSeg.has(i)?'open':''}><summary>
+      <div class="crow"><div class="cdate">${esc(fmtShort(g.start))} – ${esc(fmtShort(g.end-1))}</div><div class="cmeta">${f0(g.total)} out · ${f0(g.payIn)} in · ${plural(g.nBills,'bill')}</div>
+      <div class="cnum ${g.low<-0.004?'bad':''}"><small>Lowest balance</small>${down(g.low)}</div><span class="chev"></span>${pills?`<div class="cpills">${pills}</div>`:''}</div>
+      <div class="track"><i style="width:${(g.total/maxT*100).toFixed(1)}%"></i></div>
+    </summary><ul class="items">${items}</ul></details>`;
+  }).join('');
+  return `<section class="card flush cyc"><div class="hd"><h2>Coming fortnights</h2><p>${sub} Tap one to see every payment.</p></div>${rows}</section>`;
+}
+function viewNow(){
+  const P=plan();
+  return exampleBanner()+`<div id="warnBox">${warnHtml(P)}</div><div class="nowgrid"><div class="nl"><div class="g-hero" id="heroBox">${heroHtml(P)}</div><div class="g-today" id="todayBox">${todayHtml(P)}</div><div class="g-side" id="catBox">${catHtml(P)}</div></div>
+    <div class="nr"><div class="g-tiles"><div id="tilesBox">${tilesHtml(P)}</div></div><div class="g-main" id="segBox">${segHtml(P)}</div></div></div>`;
+}
+/* After the balance or buffer changes, redraw the Now panels without rebuilding the page. */
+function refreshNow(){
+  planMemo=null;const P=plan();
+  // only touch panels whose content changed, so a tap on an unchanged tile is never lost mid-redraw
+  const set=(id,h)=>{const el=$(id);if(el&&el._h!==h){el.innerHTML=h;el._h=h;}};
+  set('#heroFig',heroFig(P));set('#heroWork',heroWork(P));set('#tilesBox',tilesHtml(P));set('#todayBox',todayHtml(P));set('#warnBox',warnHtml(P));set('#catBox',catHtml(P));set('#segBox',segHtml(P));
+}
+
+/* ---------- Calendar tab ---------- */
+function balanceOn(P,d){
+  if(!P||d<P.t||d>=P.end)return null;
+  let b=P.start;for(const [k,x] of P.days){if(k<=d)b=x.bal;else break;}
+  return b;
+}
+function viewCalendar(){
+  const P=plan();const t=today();
+  if(calY==null){[calY,calM]=ymd(t);selDay=t;}
+  const first=D(calY,calM,1),dim=daysInMonth(calY,calM),off=(dow(first)+6)%7;
+  const [ty,tm]=ymd(t),[my,mm]=ymd(t+365);
+  const cur=calY*12+calM,canPrev=cur>ty*12+tm,canNext=cur<my*12+mm;
+  let cells=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(w=>`<span class="wd">${w}</span>`).join('');
+  for(let i=0;i<off;i++)cells+='<span class="day blank"></span>';
+  let monthTotal=0;const used=new Set();
+  for(let dd=1;dd<=dim;dd++){
+    const d=first+dd-1,past=d<t,x=P&&!past?P.days.get(d):null;
+    const bills=x?x.bills:[];const tot=bills.reduce((n,e)=>n+e.amt,0);monthTotal+=tot;
+    bills.forEach(e=>used.add(catOf(e.bl.category).id));
+    const dots=bills.slice(0,4).map(e=>`<i style="${cc(e.bl.category)}"></i>`).join('')+(bills.length>4?`<b>+${bills.length-4}</b>`:'');
+    const cls=[past?'past':'',d===t?'today':'',d===selDay?'sel':'',x&&x.pays.length?'pay':'',x&&x.bal<P.buf-0.004?'low':''].join(' ');
+    const al=fmtFull(d)+(tot?', '+plural(bills.length,'bill')+', '+f2(tot):'')+(x&&x.pays.length?', '+x.pays.map(e=>e.person.name).join(' and ')+' paid':'');
+    cells+=`<button class="day ${cls}" data-act="day" data-d="${d}" aria-label="${esc(al)}" aria-pressed="${d===selDay}"><span class="dn">${dd}</span><span class="dots">${dots}</span>${tot?`<span class="damt">${fk(tot)}</span>`:''}</button>`;
+  }
+  const legend=S.categories.filter(c=>used.has(c.id)).map(c=>`<li><span class="dot" style="${cc(c.id)}"></span>${esc(c.name)}</li>`).join('')
+    +`<li><span class="pb"></span>Payday</li><li><span class="lowk">12</span>Below buffer</li>`;
+  // selected day
+  let detail='';
+  if(selDay!=null){
+    const past=selDay<t,x=P&&!past?P.days.get(selDay):null,b=past?null:balanceOn(P,selDay);
+    const list=[];
+    (x?x.pays:[]).forEach(e=>list.push(`<li class="pay"><span class="n">${esc(putsIn(e.person.name))}${e.today?'<small>Counted in today\'s balance</small>':''}</span><span class="a">+${f2(e.amt)}</span></li>`));
+    (x?x.bills:[]).forEach(e=>list.push(`<li><span class="n"><i class="dot" style="${cc(e.bl.category)}"></i>${esc(e.bl.name)}<small>${esc(ownerName(e.bl.owner))} · ${esc(catOf(e.bl.category).name)}</small></span><span class="a">${f2(e.amt)}</span></li>`));
+    const close=b!=null?`<li class="tot"><span class="n">${list.length?'Closing balance':'Balance'}</span><span class="a">${f2(b)}</span></li>`:'';
+    detail=`<section class="card flush"><div class="hd"><p class="eyebrow">${selDay===t?'Today':past?'Past day':'Selected day'}</p><h2>${esc(fmtFull(selDay))}</h2>
+      ${past?'<p>Past days aren\'t shown.</p>':list.length?'':'<p>No bills due.</p>'}</div>
+      ${list.length||close?`<ul class="items nod">${list.join('')}${close}</ul>`:''}</section>`;
+  }
+  return `<div class="cols cal"><section class="card"><div class="calhead"><button class="navb" data-act="calPrev" ${canPrev?'':'disabled'} aria-label="Previous month">‹</button>
+    <div><h2>${esc(fmtMonth(calY,calM))}</h2><small>${monthTotal?f2(monthTotal)+' in bills':'No bills'}${cur===ty*12+tm?' from today':''}</small></div>
+    <button class="navb" data-act="calNext" ${canNext?'':'disabled'} aria-label="Next month">›</button></div>
+    <div class="grid">${cells}</div><ul class="legend">${legend}</ul></section><div class="col">${detail}</div></div>`;
+}
+
+/* ---------- Bills tab ---------- */
+let editChanges=[],editChangesFor=null;
+function changesListHtml(){
+  const t=today();
+  if(!editChanges.length)return '<li class="chnone">No changes planned.</li>';
+  return editChanges.slice().sort((x,y)=>parseISO(x.from)-parseISO(y.from)).map(c=>{
+    const f=parseISO(c.from),u=c.until?parseISO(c.until):null,ended=u!=null&&u<t;
+    return `<li class="${ended?'ended':''}"><span class="a">${f2(c.amount)}</span><span>${u!=null?`${esc(fmtShort(f))} to ${esc(fmtLong(u))}`:`from ${esc(fmtLong(f))} on`}${ended?' · ended':f<=t?' · now':''}</span><button class="x" data-act="chDel" data-id="${esc(c.id)}" aria-label="Remove this change">×</button></li>`;}).join('');
+}
+function editorHtml(b){
+  const key=b?b.id:'new';
+  const folded=b?foldChanges(b,today()):null;
+  if(editChangesFor!==key){editChangesFor=key;editChanges=folded?folded.changes.map(c=>({...c})):[];}
+  const t=today();const nd=b?nextDue(b,t):null;
+  const date=b?(nd!=null?toISO(nd):b.anchor):'';
+  const cat=b?catOf(b.category).id:(catFilter!=='all'?catFilter:'other');
+  const opts=S.categories.map(c=>`<option value="${esc(c.id)}" ${c.id===cat?'selected':''}>${esc(c.name)}</option>`).join('')+'<option value="__new">New category…</option>';
+  const cads=CADS.map(([v,l])=>`<option value="${v}" ${(b?b.cadence:'monthly')===v?'selected':''}>${l}</option>`).join('');
+  const txs=b&&Array.isArray(b.txs)?b.txs.slice().sort((x,y)=>y.d-x.d):[];
+  const src=txs.length?`<div class="txbox"><p class="flabel">Payments found in statements (${txs.length})</p>
+    ${b.total?`<p class="note">These don't follow one pattern, so the amount is the biggest month's total. Split off any that are separate bills.</p>`:b.variable?`<p class="note">From ${f2(b.min)} to ${f2(b.max)}. The amount uses the highest.</p>`:''}
+    <ul class="txlist">${txs.map((x,i)=>`<li><label for="tx-${i}"><input type="checkbox" id="tx-${i}" data-tx="${x.d}|${x.a}"><span class="d">${esc(fmtDay(x.d))}</span><span class="a">${f2(x.a)}</span></label></li>`).join('')}</ul>
+    <p class="note">Tick any payments that belong to a different bill, then split them off.</p>
+    <div class="btnrow"><button class="btn small ghost" data-act="splitTx">Split ticked into a new bill</button>${b.grp?`<button class="btn small ghost" data-act="recheck">${confirmRecheck===b.id?'Tap again to re-check':'Re-check this payee'}</button>`:''}</div></div>`
+    :(b&&b.src==='auto'?`<p class="note">Found in your statements${b.seen?', '+plural(b.seen,'payment'):''}.</p>`:'');
+  return `<div class="editor"><div class="fields">
+    <div class="field wide"><label for="e-name">Name</label><input id="e-name" type="text" maxlength="60" value="${esc(b?b.name:'')}" placeholder="Electricity"></div>
+    <div class="field"><label for="e-amt">Amount ($)</label><input id="e-amt" type="number" inputmode="decimal" min="0" step="0.01" value="${b?folded.amount:''}"></div>
+    <div class="field"><label for="e-cad">How often</label><select id="e-cad">${cads}</select></div>
+    <div class="field"><label for="e-date">Next due</label><input id="e-date" type="date" value="${esc(date)}"></div>
+    <div class="field"><label for="e-cat">Category</label><select id="e-cat">${opts}</select></div>
+    <div class="field wide"><label for="e-own">Who pays</label><select id="e-own">${b&&S.people.some(x=>x.id===b.owner)?'':'<option value="" selected>Choose who pays</option>'}${S.people.map(x=>`<option value="${esc(x.id)}" ${b&&b.owner===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select></div>
+    <div class="field wide" id="e-newwrap" hidden><label for="e-newcat">New category name</label><input id="e-newcat" type="text" maxlength="40" placeholder="Sam's bills"></div>
+  </div>
+  <label class="check"><input type="checkbox" id="e-inc" ${!b||b.include?'checked':''}> Include in the plan</label>
+  <div class="tempbox"><p class="flabel">Amount changes</p>
+    <ul class="chlist" id="e-chlist">${changesListHtml()}</ul>
+    <div class="fields">
+      <div class="field"><label for="c-amt">New amount ($)</label><input id="c-amt" type="number" inputmode="decimal" min="0" step="0.01"></div>
+      <div class="field"><label for="c-from">From</label><input id="c-from" type="date" value="${esc(toISO(today()))}"></div>
+      <div class="field wide"><label for="c-until">Until (optional)</label><input id="c-until" type="date"></div>
+    </div>
+    <div class="btnrow"><button class="btn small ghost" data-act="chAdd">Add change</button></div>
+    <div id="e-chmsg"></div>
+    <p class="note">Add an end date for a temporary change. Leave it empty for a permanent one, like a rent increase. Tap Save to keep changes.</p>
+  </div>${src}
+  <div class="btnrow"><button class="btn" data-act="saveBill">${b?'Save':'Add bill'}</button><button class="btn ghost" data-act="cancelEdit">Cancel</button>
+  ${b?`<button class="btn danger" data-act="delBill" data-id="${esc(b.id)}">${confirmDel===b.id?'Tap again to delete':'Delete'}</button>`:''}</div>${msgHtml('editor')}</div>`;
+}
+function viewBills(){
+  const t=today();const dups=findDups(t);
+  const counts=new Map();S.bills.forEach(b=>{const c=catOf(b.category).id;counts.set(c,(counts.get(c)||0)+1);});
+  if(catFilter!=='all'&&!S.categories.some(c=>c.id===catFilter))catFilter='all';
+  const chips=`<div class="chips" role="group" aria-labelledby="f-cat"><button class="chip" data-act="filter" data-cat="all" aria-pressed="${catFilter==='all'}">All <span>${S.bills.length}</span></button>`
+    +S.categories.map(c=>`<button class="chip" data-act="filter" data-cat="${esc(c.id)}" aria-pressed="${catFilter===c.id}"><i class="dot" style="${cc(c.id)}"></i>${esc(c.name)} <span>${counts.get(c.id)||0}</span></button>`).join('')+'</div>';
+  if(ownFilter!=='all'&&ownFilter!=='none'&&!S.people.some(x=>x.id===ownFilter))ownFilter='all';
+  const ownKey=b=>hasOwner(b)?b.owner:'none';
+  const ocount=new Map();S.bills.forEach(b=>{const k=ownKey(b);ocount.set(k,(ocount.get(k)||0)+1);});
+  const ochips=`<div class="chips" role="group" aria-labelledby="f-own"><button class="chip" data-act="ofilter" data-own="all" aria-pressed="${ownFilter==='all'}">Everyone</button>`
+    +S.people.concat(ocount.get('none')?[{id:'none',name:'No owner'}]:[]).map(x=>`<button class="chip" data-act="ofilter" data-own="${esc(x.id)}" aria-pressed="${ownFilter===x.id}">${esc(x.name)} <span>${ocount.get(x.id)||0}</span></button>`).join('')+'</div>';
+  const rows=S.bills.filter(b=>(catFilter==='all'||catOf(b.category).id===catFilter)&&(ownFilter==='all'||ownKey(b)===ownFilter))
+    .map(b=>({b,nd:nextDue(b,t)})).sort((x,y)=>(x.b.include===y.b.include?0:x.b.include?-1:1)||((x.nd==null?1e9:x.nd)-(y.nd==null?1e9:y.nd)));
+  const dupCount=new Set([...dups.values()].map(v=>v.key)).size;
+  const rowHtml=({b,nd})=>{
+    const dp=dups.get(b.id),open=editing===b.id,owned=hasOwner(b);
+    let pills='';
+    if(!b.include)pills+=' <span class="pill off">Off</span>';
+    const cn=changeNote(b,t),cur=amtOn(b,t),usual=foldChanges(b,t).amount;
+    if(cn)pills+=` <span class="pill acc">${esc(cn)}</span>`;
+    if(!owned)pills+=' <span class="pill warn">No owner</span>';
+    if(dp)pills+=' <span class="pill warn">Double-up?</span>';
+    if(b.irregular)pills+=' <span class="pill warn">Irregular</span>';
+    else if(b.variable)pills+=' <span class="pill acc">Varies</span>';
+    return `<li class="${b.include?'':'off'} ${open?'open':''}"><button class="brow" data-act="edit" data-id="${esc(b.id)}" aria-expanded="${open}">
+      <span class="dot" style="${cc(b.category)}"></span>
+      <span><span class="bn">${esc(b.name)}</span><span class="bs">${owned?esc(ownerName(b.owner))+' · ':''}${esc(catOf(b.category).name)} · ${esc(cadLabel(b))}${nd!=null?' · next '+esc(fmtDay(nd)):''}${pills}</span></span>
+      <span class="bamt">${f2(cur)}${Math.abs(cur-usual)>0.004?`<small>usually ${f2(usual)}</small>`:''}</span><span class="chev"></span></button>
+      ${owned||open?'':`<div class="quickown"><label for="qo-${esc(b.id)}">Who pays this?</label><select id="qo-${esc(b.id)}" data-qown="${esc(b.id)}"><option value="">Choose…</option>${S.people.map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('')}</select></div>`}
+      ${dp?`<div class="dup"><p>Looks like a double-up of <strong>${esc(dp.other.name)}</strong>: ${esc(dp.why)}.</p><div class="btnrow"><button class="btn small ghost" data-act="dupKeep" data-key="${esc(dp.key)}">Not a double-up</button><button class="btn small danger" data-act="delBill" data-id="${esc(b.id)}">${confirmDel===b.id?'Tap again to remove':'Remove this one'}</button></div></div>`:''}
+      ${open?editorHtml(b):''}</li>`;
+  };
+  // bills from the same payee sit under one heading; each keeps its own owner
+  const grpSize=new Map();S.bills.forEach(b=>{const g=grpOf(b);if(g)grpSize.set(g,(grpSize.get(g)||0)+1);});
+  const blocks=[],seenG=new Map();
+  rows.forEach(r=>{const g=grpOf(r.b);
+    if(g&&grpSize.get(g)>=2){if(!seenG.has(g)){const blk={g,rows:[]};seenG.set(g,blk);blocks.push(blk);}seenG.get(g).rows.push(r);}
+    else blocks.push({rows:[r]});});
+  const list=rows.length?blocks.map(blk=>{
+    if(!blk.g)return rowHtml(blk.rows[0]);
+    const all=S.bills.filter(b=>grpOf(b)===blk.g&&b.include);
+    const perMonth=all.reduce((n,b)=>n+annualOn(b,t)/12,0);
+    const owners=[...new Set(all.map(b=>ownerName(b.owner)))];
+    return `<li class="grp"><div class="ghead"><span class="gname">${esc((S.bills.find(b=>grpOf(b)===blk.g&&b.gname)||{}).gname||titleCase(blk.g))}</span><span class="gmeta">${plural(grpSize.get(blk.g),'bill')} · about ${f2(perMonth)} a month · ${esc(owners.join(', ')||'No owner')}</span></div><ul class="blist sub">${blk.rows.map(rowHtml).join('')}</ul></li>`;
+  }).join(''):`<li class="empty">${S.bills.length?'No bills match these filters.':'No bills yet. Import statements in Settings, or add one.'}</li>`;
+  const addBtn=editing==='new'?'':'<button class="btn" data-act="new">Add a bill</button>';
+  return exampleBanner()
+    +(dupCount?`<section class="banner"><p><strong>${plural(dupCount,'possible double-up')}.</strong> These may be the same bill counted twice. Check the ones marked below.</p></section>`:'')
+    +`<div class="billsgrid"><div class="b-list"><section class="card flush"><div class="hd"><h2>Bills</h2><p>Tap a bill to edit it.</p></div>
+      ${editing==='new'?`<div class="hd"><h2>New bill</h2></div>${editorHtml(null)}`:''}
+      <ul class="blist">${list}</ul>
+      ${addBtn?`<div class="pad addrow">${addBtn}</div>`:''}${msgHtml('bills')}</section></div>
+    <aside class="b-side"><div class="filters"><div class="fgroup"><span class="flabel" id="f-own">Who pays</span>${ochips}</div><div class="fgroup"><span class="flabel" id="f-cat">Category</span>${chips}</div></div>${billsSideHtml(addBtn)}</aside></div>`;
+}
+/* Wide screens only: what each person's bills cost a fortnight. Tapping one filters the list. */
+function billsSideHtml(addBtn){
+  const P=plan(),FN=365.25/14,cols=['c-blue','c-mint','c-lilac','c-sand'];
+  const own=P.people.map((r,i)=>{const bs=S.bills.filter(b=>b.include&&b.owner===r.p.id);const fn=bs.reduce((n,b)=>n+annualOn(b,P.t)/FN,0);
+    return `<button class="tile ${cols[i%4]}" data-act="ofilter" data-own="${esc(ownFilter===r.p.id?'all':r.p.id)}" aria-pressed="${ownFilter===r.p.id}"><span class="tl">${esc(r.p.name)}</span><span class="tv">${plural(bs.length,'bill')}</span><span class="ts">${f0(fn)} a fortnight</span></button>`;}).join('');
+  const none=P.unassigned.length?`<button class="tile c-warn" data-act="ofilter" data-own="${ownFilter==='none'?'all':'none'}" aria-pressed="${ownFilter==='none'}"><span class="tl">No owner</span><span class="tv">${plural(P.unassigned.length,'bill')}</span><span class="ts">Tap to see them</span></button>`:'';
+  return `<div class="b-extra"><div class="tiles one">${own}${none}</div>${addBtn}</div>`;
+}
+function categoriesHtml(){
+  const counts=new Map();S.bills.forEach(b=>{const c=catOf(b.category).id;counts.set(c,(counts.get(c)||0)+1);});
+  const cats=S.categories.map(c=>`<li style="${cc(c.id)}"><button class="swatch" data-act="catColor" data-id="${esc(c.id)}" aria-label="Change colour for ${esc(c.name)}"></button>
+    <input type="text" id="cat-${esc(c.id)}" data-cat="${esc(c.id)}" maxlength="40" value="${esc(c.name)}" aria-label="Category name">
+    <span class="ccount">${plural(counts.get(c.id)||0,'bill')}</span>
+    ${c.id==='other'?'<span></span>':`<button class="x ${confirmCat===c.id?'confirm':''}" data-act="catDel" data-id="${esc(c.id)}" aria-label="Delete ${esc(c.name)}">${confirmCat===c.id?'Sure?':'×'}</button>`}</li>`).join('');
+  return `<section class="card"><p>Group bills by type. Tap a colour to change it.</p>
+      <ul class="cats">${cats}</ul>
+      <div class="addcat"><input id="newCat" type="text" maxlength="40" placeholder="New category" aria-label="New category name"><button class="btn small" data-act="catAdd">Add</button></div></section>`;
+}
+function peopleSettingsHtml(){
+  const P=plan();
+  const rows=P.people.map(r=>{const id=r.p.id,open=editingP===id;
+    return `<li class="${open?'open':''}"><button class="brow" data-act="pedit" data-id="${esc(id)}" aria-expanded="${open}">
+      <span class="dot" style="--cc:var(--accent)"></span>
+      <span><span class="bn">${esc(r.p.name)}</span><span class="bs">${esc(r.f.label)}${r.next!=null?' · next pay '+esc(fmtDay(r.next)):''}${r.next==null?' <span class="pill warn">No payday</span>':''}${r.custom?' · set amount':''}</span></span>
+      <span class="bamt">${f0(r.payIn)}</span><span class="chev"></span></button>${open?personEditor(r):''}</li>`;}).join('');
+  return `<section class="card flush"><div class="hd"><p>Who pays into the account, and when. Each person puts in what their own bills cost each pay.</p></div>
+    <ul class="blist">${rows}</ul>
+    ${editingP==='new'?`<div class="hd"><h2>New person</h2></div>${personEditor(null)}`:`<div class="pad"><button class="btn" data-act="pnew">Add a person</button></div>`}</section>`;
+}
+let setSec='';
+const isWide=()=>!!(window.matchMedia&&window.matchMedia('(min-width:1024px)').matches);
+function settingsSections(){
+  return [['people','People and paydays','Who pays in, and when'],['buffer','Buffer','What to keep spare'],['categories','Categories','Group your bills'],
+    ['statements','Statements','Import, and what is kept'],...(Sync.mode==='on'?[['passcode','Passcode',Sync.open?'Off: anyone at home can open it':'On: devices and signing out']]:[]),
+    ['backup','Backup','Save or restore a copy'],['reset','Reset','Clear things or start again']];
+}
+function sectionBody(k){
+  const s=S.settings;
+  if(k==='people')return peopleSettingsHtml();
+  if(k==='buffer')return `<section class="card"><div class="fields"><div class="field"><label for="s-buf">Safety buffer ($)</label><input id="s-buf" type="number" inputmode="decimal" min="0" step="10" data-s="buffer" value="${esc(s.buffer)}"></div></div>
+      <p class="note">The least you want left in the account at any time. The figure on Now always keeps this much spare.</p></section>`;
+  if(k==='categories')return categoriesHtml();
+  if(k==='statements')return statementsHtml();
+  if(k==='passcode')return passcodeHtml();
+  if(k==='backup')return backupHtml();
+  return resetHtml();
+}
+function viewSettings(){
+  const secs=settingsSections(),wide=isWide();
+  if(setSec&&!secs.some(x=>x[0]===setSec))setSec='';
+  const cur=setSec||(wide?'people':'');
+  const ver=`<p class="note ver">Bill Buffer ${BUILD}</p>`;
+  const nav=`<nav class="setnav" aria-label="Settings sections">${secs.map(([k,t,d])=>`<button class="setitem ${k===cur?'on':''}" data-act="setSec" data-sec="${k}" ${k===cur?'aria-current="page"':''}><span><b>${t}</b><small>${d}</small></span><span class="chev r"></span></button>`).join('')}${ver}</nav>`;
+  const title=cur?esc(secs.find(x=>x[0]===cur)[1]):'';
+  if(!wide){
+    if(!cur)return `<div class="sethead"><h2>Settings</h2></div>${nav}`;
+    return `<div class="sethead"><button class="btn small ghost" data-act="setSec" data-sec="" aria-label="Back to settings">‹ Back</button><h2>${title}</h2></div><div class="col">${sectionBody(cur)}</div>`;
+  }
+  return `<div class="setlayout">${nav}<div class="col"><h2 class="sectitle">${title}</h2>${sectionBody(cur)}</div></div>`;
+}
+
+/* ---------- Settings: statements, backup, reset ---------- */
+function statementsHtml(){
+  const ds=S.txns.map(t=>t.d);const span=ds.length?Math.max(...ds)-Math.min(...ds)+1:0;
+  const cov=!span?'':span>=60?`<span class="pill good">Good</span>`:span>=30?`<span class="pill warn">Add more</span>`:`<span class="pill bad">Too short</span>`;
+  const covTxt=span?`${plural(span,'day')} covered, ${fmtLong(Math.min(...ds))} to ${fmtLong(Math.max(...ds))}`:'Nothing imported yet';
+  const files=S.files.length?`<ul class="files">${S.files.map(f=>`<li><span>${esc(f.name)}</span><span>${esc(fmtShort(f.from))} – ${esc(fmtShort(f.to))} · ${f.added} new</span></li>`).join('')}</ul>`:'';
+  return `<section class="card"><h2>Add statements</h2><p>Import 2 to 3 months of CSV statements from your bank. A bill is found when a payment repeats. Your edits are kept when you import again.</p>
+    <div class="btnrow"><label class="btn filebtn">Choose CSV files<input id="fileCsv" type="file" accept=".csv,.txt,text/csv,text/plain" multiple></label></div>
+    <div class="fields"><div class="field wide"><label for="pasteBox">Or paste rows</label><textarea id="pasteBox" placeholder="Date,Amount,Description&#10;03/09/2026,-1850.00,RENT PAYMENT"></textarea></div></div>
+    <div class="btnrow"><button class="btn ghost" data-act="pasteImport">Add pasted rows</button></div>${msgHtml('import')}</section>
+  <section class="card"><h2>What's loaded ${cov}</h2><p>${esc(covTxt)}${S.txns.length?`, ${S.txns.length} payments out`:''}.</p>${files}
+    ${S.hidden.length&&S.txns.length?`<div class="btnrow"><button class="btn small ghost" data-act="unhide">Bring back ${plural(S.hidden.length,'deleted bill')}</button></div>`:''}</section>
+  <section class="card"><h2>Statement details</h2><p>Delete the imported payments and keep just your bills. Amounts, dates, owners and changes stay.</p>
+    <div class="btnrow"><button class="btn danger" data-act="stripNow" ${S.txns.length||S.bills.some(b=>(b.txs||[]).length)?'':'disabled'}>${confirmReset==='strip'?'Tap again to remove':'Remove statement details'}</button></div>
+    <label class="check"><input type="checkbox" id="autoStrip" ${S.settings.autoStrip?'checked':''}> Remove them automatically after each import</label>
+    <p class="note">Without the details, a bill can't be split by its payments or re-checked. Importing again brings them back${S.settings.autoStrip?' briefly, until they are removed again':''}.</p>${msgHtml('strip')}</section>`;
+}
+function backupHtml(){
+  const lb=S.meta.lastBackup,ch=S.meta.changed;
+  const stale=!lb||(ch&&ch>Date.parse(lb)+1500);
+  const status=lb?`Last backup ${ago(lb)}.${stale?' You have changed things since.':''}`:'No backup yet.';
+  const pill=!lb?'<span class="pill bad">None</span>':stale?'<span class="pill warn">Out of date</span>':'<span class="pill good">Up to date</span>';
+  const restore=pendingRestore?`<div class="msg"><strong>Restore ${esc(pendingRestore.name)}?</strong><br>This replaces ${Sync.mode==='on'?'the shared bills for everyone':'everything on this device'}${pendingRestore.exportedAt?' with the backup from '+esc(fmtLong(Math.floor(Date.parse(pendingRestore.exportedAt)/864e5))):''}.<div class="btnrow"><button class="btn small" data-act="restoreYes">Restore</button><button class="btn small ghost" data-act="restoreNo">Cancel</button></div></div>`:'';
+  return `<section class="card"><h2>Back up ${pill}</h2><p>${esc(status)}</p>
+    <ol class="steps"><li>Tap <strong>Save a backup</strong>.</li><li>On a phone, pick where to keep it, such as Drive or Files.</li><li>On a computer, it goes to your Downloads folder.</li></ol>
+    <div class="btnrow"><button class="btn" data-act="backup">Save a backup</button></div>${msgHtml('backup')}</section>
+  <section class="card"><h2>Restore from a backup</h2><p>${Sync.mode==='on'?'Restoring replaces the shared bills for everyone.':'Your data lives in this browser. If its site data is cleared or you switch phones, restore your latest backup file.'} Backups from older versions work too.</p>
+    <div class="btnrow"><label class="btn ghost filebtn">Choose backup file<input id="fileRestore" type="file" accept=".json,application/json"></label></div>${restore}${msgHtml('restore')}</section>`;
+}
+function resetHtml(){
+  const opts=[
+    ['statements','Clear statements','Removes imported statements and the bills found in them. Keeps people, categories and bills you have edited.','Clear statements'],
+    ['bills','Clear all bills','Removes every bill and statement. Keeps people, paydays and categories.','Clear bills'],
+    ['all','Clear everything','Removes all bills, statements, people, categories and settings. The app starts empty.','Clear everything'],
+    ['example','Load the example','Replaces everything with example bills to try the app.','Load example']];
+  return `<section class="card"><p>These can't be undone. Back up first if you might want your data back.</p>
+    <ul class="rlist">${opts.map(([k,t,d,b])=>`<li><div><strong>${t}</strong><p>${d}</p></div><button class="btn small danger" data-act="reset" data-kind="${k}">${confirmReset===k?'Tap again':b}</button></li>`).join('')}</ul>${msgHtml('reset')}</section>`;
+}
+
+/* ---------- one shared copy on the household server ----------
+   The hosted app keeps no copy of the bills on the device. Everything is read from and saved
+   straight to the server, so every device works on the same version. If someone else saves
+   first, the save is refused and the latest version is shown instead of overwriting it.
+   With a passcode set on the server, each device signs in once and gets its own token. */
+var Sync={open:false,lock:null,mode:SERVER_MODE?'loading':'local',status:'',timer:null,poll:null,lastOk:null,busy:false,gen:0,dirty:false,signinErr:'',confirmAll:false,notice:'',down:false};
+const SKEY='billbuffer.sync';
+/* A device's sign-in is kept for good (localStorage), or only until the app is closed (sessionStorage)
+   when "Keep this device signed in" was unticked. */
+let SY=(()=>{let o={},t;try{o=JSON.parse(localStorage.getItem(SKEY))||{};}catch(e){}
+  if(!o.token){try{t=sessionStorage.getItem(SKEY+'.token')||undefined;}catch(e){}}
+  return {token:o.token||t,device:o.device,remember:!t};})();
+let serverVersion=0;
+function sySave(){
+  const keep=SY.remember!==false;
+  try{localStorage.setItem(SKEY,JSON.stringify({token:keep?SY.token:undefined,device:SY.device}));}catch(e){}
+  try{if(!keep&&SY.token)sessionStorage.setItem(SKEY+'.token',SY.token);else sessionStorage.removeItem(SKEY+'.token');}catch(e){}
+}
+const guessDevice=()=>/Android|iPhone|Mobile/i.test(navigator.userAgent)?'Phone':'Computer';
+async function api(method,path,body){
+  const hd={'Content-Type':'application/json','X-BB-Device':(SY.device||guessDevice()).replace(/[^\x20-\x7e]/g,'')};
+  if(SY.token)hd.Authorization='Bearer '+SY.token;
+  const r=await fetch('api/'+path,{method,headers:hd,body:body?JSON.stringify(body):undefined,cache:'no-store',credentials:'omit'});
+  let j=null;try{j=await r.json();}catch(e){}
+  return {status:r.status,data:j};
+}
+function canApplyRemote(){const a=document.activeElement;return !editing&&!editingP&&!pendingRestore&&!(a&&/^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName));}
+function syncChip(){
+  if(Sync.mode!=='on')return `<small id="syncChip">${esc(fmtDay(today()))}</small>`;
+  const map={synced:['good','Saved'],saving:['acc','Saving…'],offline:['bad','Not connected']};
+  const [k,l]=map[Sync.status]||['acc','Loading…'];
+  return `<span id="syncChip" class="pill ${k}" role="status">${l}</span>`;
+}
+function setSyncStatus(s){Sync.status=s;const el=$('#syncChip');if(el)el.outerHTML=syncChip();}
+function takeServer(cur){serverVersion=cur.version||0;S=cur.state?cleanState(cur.state,false):defaults();Sync.dirty=false;Sync.lastOk=Date.now();}
+async function loadFromServer(){
+  try{
+    const r=await api('GET','state');
+    if(r.status===401)return signedOut();
+    if(r.status!==200)throw 0;
+    takeServer(r.data);Sync.down=false;Sync.mode='on';setSyncStatus('synced');render();
+  }catch(e){Sync.down=true;Sync.mode='on';Sync.status='offline';render();}
+}
+function queuePush(){
+  if(Sync.mode!=='on')return;
+  Sync.gen++;Sync.dirty=true;clearTimeout(Sync.timer);Sync.timer=setTimeout(pushNow,350);setSyncStatus('saving');
+}
+async function pushNow(){
+  clearTimeout(Sync.timer);Sync.timer=null;
+  if(Sync.mode!=='on'||!Sync.dirty)return;
+  if(Sync.busy){Sync.timer=setTimeout(pushNow,300);return;}
+  Sync.busy=true;const gen=Sync.gen;
+  try{
+    const r=await api('PUT','state',{base:serverVersion,state:S});
+    if(r.status===200){
+      serverVersion=r.data.version;Sync.lastOk=Date.now();Sync.down=false;
+      if(Sync.gen===gen){Sync.dirty=false;setSyncStatus('synced');}else Sync.timer=setTimeout(pushNow,100);
+    } else if(r.status===409){
+      const who=r.data&&r.data.updatedBy?r.data.updatedBy:'Someone else';
+      takeServer(r.data);editing=null;editingP=null;
+      Sync.notice=`${who} saved a change just before you, so your last change wasn't saved. This is the latest version. Please make your change again.`;
+      setSyncStatus('synced');render();
+    } else if(r.status===401){Sync.busy=false;return signedOut();}
+    else throw 0;
+  }catch(e){
+    Sync.dirty=false;Sync.down=true;
+    Sync.notice="Your last change wasn't saved because the server can't be reached. The latest version will load when it's back.";
+    setSyncStatus('offline');render();
+  }
+  Sync.busy=false;
+}
+async function pullNow(){
+  if(Sync.mode!=='on'||Sync.busy||Sync.dirty)return;
+  try{
+    const wasDown=Sync.down;
+    const r=await api('GET',wasDown?'state':'state?since='+serverVersion);
+    if(r.status===401)return signedOut();
+    if(r.status!==200)throw 0;
+    Sync.down=false;Sync.lastOk=Date.now();
+    if(Sync.dirty||Sync.busy)return;
+    if(r.data.unchanged){setSyncStatus('synced');if(wasDown)render();return;}
+    if(canApplyRemote()||wasDown){takeServer(r.data);setSyncStatus('synced');render();}
+  }catch(e){if(!Sync.down){Sync.down=true;setSyncStatus('offline');render();}}
+}
+function startPolling(){stopPolling();Sync.poll=setInterval(()=>{if(document.visibilityState==='visible')pullNow();},15000);}
+function stopPolling(){clearInterval(Sync.poll);Sync.poll=null;}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')pullNow();});
+window.addEventListener('online',()=>pullNow());
+function signedOut(){
+  stopPolling();clearTimeout(Sync.timer);
+  SY={device:SY.device};sySave();S=defaults();Sync.open=false;serverVersion=0;
+  Sync.mode='signin';Sync.status='';Sync.notice='';
+  render();
+}
+async function boot(){
+  if(!SERVER_MODE){render();return;}
+  render();
+  let st=null;
+  try{const r=await fetch('api/status',{cache:'no-store',credentials:'omit'});if(r.ok)st=await r.json();}catch(e){}
+  if(!st||st.app!=='bill-buffer'){Sync.mode='on';Sync.down=true;Sync.status='offline';startPolling();render();return;}
+  if(!st.ready){Sync.mode='nopass';render();return;}
+  Sync.open=!!st.open;Sync.lock=st.lock||null;
+  if(Sync.open){if(!SY.device){SY.device=guessDevice();sySave();}}
+  else if(!SY.token){Sync.mode='signin';render();return;}
+  Sync.mode='on';startPolling();await loadFromServer();
+}
+async function doSignin(){
+  const pass=$('#si-pass').value,device=($('#si-dev').value||'').trim()||guessDevice(),remember=$('#si-keep').checked;
+  if(!pass){Sync.signinErr='Enter the household passcode.';render();return;}
+  let r;
+  try{r=await api('POST','login',{passcode:pass,device});}catch(e){Sync.signinErr="Can't reach the server. Check you're on your home network.";render();return;}
+  if(r.status===200&&r.data&&r.data.token){
+    SY={token:r.data.token,device,remember};sySave();
+    Sync.signinErr='';Sync.mode='on';startPolling();await loadFromServer();return;
+  }
+  if(r.status===429){const m=Math.max(1,Math.ceil(((r.data&&r.data.retryAfter)||900)/60));Sync.signinErr=`Too many wrong tries. Try again in ${plural(m,'minute')}.`;}
+  else if(r.status===401){const n=r.data&&r.data.triesLeft;Sync.signinErr=`That passcode isn't right.${n>0?` ${plural(n,'try','tries')} left before a 15 minute lockout.`:''}`;}
+  else if(r.status===503){Sync.mode='nopass';}
+  else if(r.status===400){Sync.mode='on';Sync.open=true;startPolling();await loadFromServer();return;}
+  else Sync.signinErr='Sign-in failed. Try again.';
+  render();
+}
+function signinHtml(){
+  return `<section class="card"><h2>Sign in to your household</h2><p>Enter the household passcode once on this device.</p>
+    <form id="signinForm" autocomplete="on"><div class="fields">
+      <div class="field wide"><label for="si-pass">Household passcode</label><input id="si-pass" type="password" autocomplete="current-password"></div>
+      <div class="field wide"><label for="si-dev">Name this device</label><input id="si-dev" type="text" maxlength="40" value="${esc(SY.device||guessDevice())}"></div>
+    </div><label class="check"><input type="checkbox" id="si-keep" checked> Keep this device signed in</label>
+    <p class="note">Untick it on a shared device to be asked for the passcode each time the app is opened.</p>
+    <div class="btnrow"><button class="btn" type="submit">Sign in</button></div></form>
+    ${Sync.signinErr?`<div class="msg bad" role="status">${esc(Sync.signinErr)}</div>`:''}</section>`;
+}
+function nopassHtml(){
+  return `<section class="card"><h2>Passcode too short</h2><p>The server has a passcode set, but it's shorter than 8 characters, so sign-in is switched off.</p>
+    <ol class="steps"><li>Open the container settings on your server.</li><li>Make <code>BB_PASSCODE</code> at least 8 characters, or empty it and set a passcode in the app instead.</li><li>Restart the container.</li></ol></section>`;
+}
+function downHtml(){
+  return `<section class="card"><h2>Can't reach your server</h2><p>Bill Buffer works straight from your server, so it needs a connection to show or change the bills. Check this device is on your home network (or Tailscale) and that the Bill Buffer container is running.</p>
+    <div class="btnrow"><button class="btn" data-act="retry">Try again</button></div><p class="note">It also retries by itself every 15 seconds.</p></section>`;
+}
+function noticeHtml(){
+  if(!Sync.notice)return '';
+  return `<section class="banner"><p>${esc(Sync.notice)}</p><button class="btn small" data-act="dismissNotice">OK</button></section>`;
+}
+/* ---------- Settings: passcode ----------
+   The lock lives on the server, so it can't be skipped by opening the address some other way. */
+function passcodeHtml(){
+  if(Sync.mode!=='on')return '';
+  const pw=(id,label,ac)=>`<div class="field wide"><label for="${id}">${label}</label><input id="${id}" type="password" autocomplete="${ac}" maxlength="200"></div>`;
+  const newPw=pw('pc-new','New passcode (8 or more characters)','new-password')+pw('pc-new2','Type it again','new-password');
+  if(Sync.open)return `<section class="card"><h2>Turn on a passcode</h2>
+    <p>It's off, so anyone on your home network who opens the app's address can see and change the bills. With a passcode, every device has to sign in once. This device stays signed in.</p>
+    <form id="pcOn" autocomplete="off"><div class="fields">${newPw}</div><div class="btnrow"><button class="btn" type="submit">Turn on passcode</button></div></form>${msgHtml('passcode')}</section>`;
+  const devices=`<section class="card"><h2>Signed-in devices</h2>
+    <p>${Sync.lock==='server'?'The passcode is on. It is set in the container (<code>BB_PASSCODE</code>), so change or remove it there.':'The passcode is on. Each device signs in once with it.'}</p>
+    <ul class="files" id="devList"><li><span>Loading devices…</span><span></span></li></ul>
+    <div class="btnrow"><button class="btn small ghost" data-act="signOut">Sign out this device</button>
+    <button class="btn small danger" data-act="signOutAll">${Sync.confirmAll?'Tap again to sign out all':'Sign out every device'}</button></div>${msgHtml('passcode')}</section>`;
+  if(Sync.lock==='server')return devices;
+  return devices+`<section class="card"><h2>Change passcode</h2><p>Every other device will need to sign in again with the new one.</p>
+    <form id="pcChange" autocomplete="off"><div class="fields">${pw('pc-cur','Current passcode','current-password')}${newPw}</div><div class="btnrow"><button class="btn" type="submit">Change passcode</button></div></form>${msgHtml('pcchange')}</section>
+  <section class="card"><h2>Turn off passcode</h2><p>Anyone on your home network will be able to open the app without signing in.</p>
+    <form id="pcOff" autocomplete="off"><div class="fields">${pw('pc-off','Current passcode','current-password')}</div><div class="btnrow"><button class="btn danger" type="submit">Turn off passcode</button></div></form>${msgHtml('pcoff')}</section>`;
+}
+async function passcodeSubmit(id){
+  const v=x=>{const e=$(x);return e?e.value:'';};
+  const where=id==='pcOn'?'passcode':id==='pcChange'?'pcchange':'pcoff';
+  const fail=t=>{setMsg(where,t,'bad');render();};
+  let body;
+  if(id==='pcOff'){if(!v('#pc-off'))return fail('Enter the current passcode.');body={current:v('#pc-off'),new:''};}
+  else{
+    const n=v('#pc-new');
+    if(id==='pcChange'&&!v('#pc-cur'))return fail('Enter the current passcode.');
+    if(n.length<8)return fail('Use at least 8 characters.');
+    if(n!==v('#pc-new2'))return fail("The two new passcodes don't match.");
+    body={current:v('#pc-cur'),new:n};
+  }
+  let r;try{r=await api('POST','passcode',body);}catch(e){return fail("Can't reach the server. Try again.");}
+  if(r.status===200){
+    if(r.data.on){SY.token=r.data.token;sySave();Sync.open=false;Sync.lock='app';
+      setMsg('passcode',id==='pcOn'?'Passcode on. Other devices will ask for it.':'Passcode changed. Other devices will need the new one.','good');}
+    else{SY.token=undefined;sySave();Sync.open=true;Sync.lock=null;setMsg('passcode','Passcode off. Anyone on your home network can open the app.','good');}
+    return render();
+  }
+  const d=r.data||{};
+  if(r.status===401&&d.error==='wrong_passcode')return fail(`That passcode isn't right.${d.triesLeft>0?` ${plural(d.triesLeft,'try','tries')} left before a 15 minute lockout.`:''}`);
+  if(r.status===429)return fail(`Too many wrong tries. Try again in ${plural(Math.max(1,Math.ceil((d.retryAfter||900)/60)),'minute')}.`);
+  if(r.status===401)return signedOut();
+  if(r.status===409){Sync.open=false;Sync.lock='server';return fail('The passcode is set in the container (BB_PASSCODE), so change it there.');}
+  if(r.status===400&&d.error==='bad_length')return fail('Use at least 8 characters.');
+  fail("The passcode couldn't be changed. Try again.");
+}
+/* Checks the lock on the server (another device may have changed it), then lists signed-in devices. */
+async function loadPasscode(){
+  try{const r=await fetch('api/status',{cache:'no-store',credentials:'omit'});const st=await r.json();
+    if(!!st.open!==Sync.open||(st.lock||null)!==Sync.lock){Sync.open=!!st.open;Sync.lock=st.lock||null;
+      if(Sync.open){SY.token=undefined;sySave();}render();return;}}catch(e){}
+  if(!Sync.open)loadDevices();
+}
+async function loadDevices(){
+  try{const r=await api('GET','devices');if(r.status!==200)throw 0;
+    const L=$('#devList');if(!L)return;
+    L.innerHTML=r.data.devices.map(d=>`<li><span>${esc(d.device||'Device')}${d.you?' <span class="pill acc">This device</span>':''}</span><span>${d.lastSeen?'used '+esc(ago(d.lastSeen*1000)):''}</span></li>`).join('')||'<li><span>No devices</span><span></span></li>';
+  }catch(e){const L=$('#devList');if(L)L.innerHTML='<li><span>Device list unavailable</span><span></span></li>';}
+}
+
+const TAB_ICONS={"now": "<path d=\"M4 20V10M10 20V4M16 20v-7M22 20H2\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"/>", "calendar": "<rect x=\"3\" y=\"5\" width=\"18\" height=\"16\" rx=\"3\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"/><path d=\"M3 10h18M8 3v4M16 3v4\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"/>", "bills": "<path d=\"M6 3h12v18l-3-2-3 2-3-2-3 2z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linejoin=\"round\"/><path d=\"M9 8h6M9 12h6\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"/>", "settings": "<circle cx=\"12\" cy=\"12\" r=\"3\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"/><path d=\"M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"/>"};
+const brandHtml=`<h1 class="brand"><span class="logo" aria-hidden="true"></span>Bill Buffer</h1>`;
+const TABS=[['now','Now'],['calendar','Calendar'],['bills','Bills'],['settings','Settings']];
+/* The same tabs, drawn as a bottom bar on phones and across the header on wide screens. */
+const navHtml=cls=>`<nav class="${cls}" role="tablist" aria-label="Sections">${TABS.map(([k,l])=>`<button role="tab" aria-selected="${tab===k}" data-act="tab" data-tab="${k}"><span class="ti"><svg viewBox="0 0 24 24" aria-hidden="true">${TAB_ICONS[k]}</svg></span>${l}</button>`).join('')}</nav>`;
+function render(){
+  planMemo=null;
+  if(Sync.mode==='loading'){$('#app').innerHTML=`<div class="top">${brandHtml}<small id="syncChip">Loading…</small></div><section class="card"><p>Loading your bills from the server…</p></section>`;return;}
+  if(Sync.mode==='on'&&Sync.down&&serverVersion===0&&!Sync.lastOk){$('#app').innerHTML=`<div class="top">${brandHtml}${syncChip()}</div>${downHtml()}`;return;}
+  if(Sync.mode==='signin'||Sync.mode==='nopass'){
+    $('#app').innerHTML=`<div class="top">${brandHtml}${syncChip()}</div>${Sync.mode==='signin'?signinHtml():nopassHtml()}`;
+    const f=$('#si-pass');if(f&&Sync.mode==='signin')f.focus();
+    return;
+  }
+  if(!TABS.some(x=>x[0]===tab))tab='now';
+  const body=tab==='now'?viewNow():tab==='calendar'?viewCalendar():tab==='bills'?viewBills():viewSettings();
+  $('#app').innerHTML=`<div class="top main">${brandHtml}${navHtml('topnav')}${syncChip()}</div>${navHtml('tabbar')}${Sync.down&&Sync.mode==='on'?`<section class="banner"><p><strong>Not connected to your server.</strong> Changes can't be saved until it's back.</p><button class="btn small" data-act="retry">Try again</button></section>`:''}${noticeHtml()}${body}`;
+  if(tab==='settings'&&Sync.mode==='on'&&setSec==='passcode')loadPasscode();
+}
+
+/* ---------- actions ---------- */
+function stripStatements(){
+  S.bills.forEach(b=>{if(b.src==='auto')b.locked=true;b.txs=[];});
+  S.txns=[];S.files=[];
+}
+function clearExampleData(){S.example=false;S.txns=[];S.bills=[];S.files=[];S.hidden=[];S.notDup=[];S.people=DEFAULT_PEOPLE();}
+async function importTexts(items){
+  const results=[];const errs=[];
+  items.forEach(it=>{const r=extract(it.text);if(r.err)errs.push(`${it.name}: ${r.err}`);else results.push({it,r});});
+  if(results.length&&S.example)clearExampleData();
+  let total=0;
+  results.forEach(({it,r})=>{
+    const added=mergeTxns(r.txns);total+=added;const ds=r.txns.map(t=>t.d);
+    S.files.push({name:it.name,from:Math.min(...ds),to:Math.max(...ds),rows:r.txns.length,added});
+  });
+  if(results.length){redetect();if(S.settings.autoStrip)stripStatements();persist();}
+  const found=S.bills.filter(b=>b.src==='auto').length;
+  const parts=[];
+  if(results.length)parts.push(`Added ${plural(total,'payment')}. ${plural(found,'recurring bill')} found. Check them on the Bills tab.${S.settings.autoStrip?' The statement details were removed afterwards.':''}`);
+  if(results.some(x=>x.r.unsigned))parts.push('This file shows every amount as positive, so all rows were treated as payments out. Turn off anything that is not a bill.');
+  if(errs.length)parts.push(errs.join(' '));
+  setMsg('import',parts.join(' '),errs.length&&!results.length?'bad':'good');
+  render();
+}
+function newCategory(name){
+  name=name.trim().slice(0,40);if(!name)return null;
+  const ex=S.categories.find(c=>c.name.toLowerCase()===name.toLowerCase());if(ex)return ex.id;
+  const usedC=new Set(S.categories.map(c=>c.color));let color=0;while(usedC.has(color)&&color<8)color++;if(color>=8)color=S.categories.length%8;
+  const id='c'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+  S.categories.push({id,name,color});return id;
+}
+function formError(text){
+  const ed=document.querySelector('.editor');if(!ed)return;
+  let m=ed.querySelector('.msg');if(!m){m=document.createElement('div');m.setAttribute('role','status');ed.appendChild(m);}
+  m.className='msg bad';m.textContent=text;
+}
+function savePerson(){
+  const name=$('#p-name').value.trim().slice(0,30),pay=$('#p-pay').value,freq=$('#p-freq').value,pin=$('#p-in').value.trim();
+  if(!name){formError('Enter a name.');return;}
+  if(parseISO(pay)==null){formError('Enter their next payday.');return;}
+  if(pin!==''&&!(+pin>=0)){formError('The amount must be a number, or leave it empty.');return;}
+  const fields={name,nextPayday:pay,freq:FREQ[freq]?freq:'fortnightly',payIn:pin===''?'':+pin};
+  if(editingP==='new'){
+    const id='p'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+    S.people.push(Object.assign({id},fields));
+  } else {const x=S.people.find(q=>q.id===editingP);if(x)Object.assign(x,fields);}
+  editingP=null;msg=null;persist();render();
+}
+function saveBill(){
+  const name=$('#e-name').value.trim(),amt=parseFloat($('#e-amt').value),cad=$('#e-cad').value,date=$('#e-date').value,inc=$('#e-inc').checked;
+  let cat=$('#e-cat').value;
+  if(!name||!(amt>=0)||parseISO(date)==null){formError('Enter a name, an amount and the next due date.');return;}
+  if(cat==='__new'){cat=newCategory($('#e-newcat').value);if(!cat){formError('Type a name for the new category.');return;}}
+  const owner=$('#e-own').value;
+  if(!S.people.some(x=>x.id===owner)){formError('Choose who pays this bill.');return;}
+  const fields={owner,changes:editChanges.map(c=>({...c})),name,amount:Math.round(amt*100)/100,cadence:cad,anchor:date,dom:ymd(parseISO(date))[2],category:cat,include:inc,locked:true};
+  if(editing!=='new'){const b0=S.bills.find(x=>x.id===editing);if(b0){const nd0=nextDue(b0,today());
+    if(cad===b0.cadence&&nd0!=null&&date===toISO(nd0)){delete fields.anchor;delete fields.dom;}else fields.userDates=true;}}
+  else fields.userDates=true;
+  if(editing==='new'){
+    if(S.example)clearExampleData();
+    S.bills.push(Object.assign({id:'m:'+Date.now().toString(36),src:'manual'},fields));
+    setMsg('bills',`Added ${name}.`,'good');
+  } else {
+    const b=S.bills.find(x=>x.id===editing);if(b)Object.assign(b,fields);
+    setMsg('bills',`Saved ${name}.`,'good');
+  }
+  editing=null;confirmDel=null;editChangesFor=null;persist();render();
+}
+function splitTx(){
+  const b=S.bills.find(x=>x.id===editing);if(!b||!Array.isArray(b.txs))return;
+  const ticked=new Set([...document.querySelectorAll('[data-tx]:checked')].map(i=>i.dataset.tx));
+  if(!ticked.size){formError('Tick at least one payment to split off.');return;}
+  const moved=b.txs.filter(x=>ticked.has(x.d+'|'+x.a)),left=b.txs.filter(x=>!ticked.has(x.d+'|'+x.a));
+  if(!left.length){formError('Leave at least one payment on this bill.');return;}
+  const keepInc=b.include;
+  Object.assign(b,seriesFields(left,left.length>=2?null:b.cadence),{locked:true,total:false,grp:grpOf(b)||b.grp,include:keepInc});
+  const nb=Object.assign({id:'m:'+Date.now().toString(36),src:'manual',grp:b.grp,name:b.name+' (split)',owner:b.owner,category:b.category,include:true,locked:true},
+    seriesFields(moved,moved.length>=2?null:b.cadence));
+  S.bills.push(nb);editing=nb.id;confirmDel=null;persist();
+  setMsg('editor',`Split ${plural(moved.length,'payment')} into this new bill. Give it a name and check the details, then save.`,'good');render();
+  const n=$('#e-name');if(n){n.focus();n.select();}
+}
+function recheck(){
+  const b=S.bills.find(x=>x.id===editing);if(!b)return;const g=grpOf(b);if(!g)return;
+  const inherit={category:b.category},ownersById=new Map(S.bills.filter(x=>grpOf(x)===g).map(x=>[x.id,x.owner]));
+  S.bills=S.bills.filter(x=>grpOf(x)!==g);
+  S.hidden=S.hidden.filter(id=>!(id==='d:'+g||id.startsWith('d:'+g+'|')));
+  redetect();
+  const now=S.bills.filter(x=>grpOf(x)===g);
+  now.forEach(x=>{if(!x.owner&&ownersById.get(x.id))x.owner=ownersById.get(x.id);x.category=inherit.category;});
+  editing=null;confirmRecheck=null;persist();
+  setMsg('bills',now.length?`Re-checked: found ${plural(now.length,'bill')} for this payee.`:'Re-checked: no regular bill found for this payee.','good');render();
+}
+function deleteBill(id){
+  const b=S.bills.find(x=>x.id===id);if(!b)return;
+  if(b.src==='auto'&&!S.hidden.includes(id))S.hidden.push(id);
+  S.bills=S.bills.filter(x=>x.id!==id);
+  S.notDup=S.notDup.filter(k=>!k.split('~').includes(id));
+  if(editing===id)editing=null;confirmDel=null;
+  persist();setMsg('bills',`Deleted ${b.name}.`,'good');render();
+}
+async function saveBackupFile(name,data){
+  if(dl){await dl.save({filename:name,data});return;}
+  const file=new File([data],name,{type:'application/json'});
+  if(navigator.canShare&&navigator.canShare({files:[file]})){
+    try{await navigator.share({files:[file],title:'Bill Buffer backup'});return;}
+    catch(e){if(e&&e.name==='AbortError')throw {code:'declined'};}
+  }
+  const u=URL.createObjectURL(file),a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(u),4000);
+}
+async function doBackup(){
+  try{
+    const payload={app:'bill-buffer',version:2,exportedAt:new Date().toISOString(),state:S};
+    await saveBackupFile(`bill-buffer-backup-${toISO(today())}.json`,JSON.stringify(payload,null,1));
+    S.meta.lastBackup=new Date().toISOString();persist(false);queuePush();
+    setMsg('backup','Backup saved.','good');
+  }catch(e){
+    setMsg('backup',e&&e.code==='declined'?'Backup cancelled.':'Could not save the backup'+(e&&e.message?': '+e.message:'.'),'bad');
+  }
+  render();
+}
+async function onRestoreFile(file){
+  try{
+    const o=JSON.parse(await file.text());
+    if(!o||o.app!=='bill-buffer'||!o.state||!Array.isArray(o.state.bills)||!Array.isArray(o.state.txns))throw new Error('not a backup');
+    pendingRestore={name:file.name,state:o.state,exportedAt:o.exportedAt};msg=null;
+  }catch(e){pendingRestore=null;setMsg('restore',"That file isn't a Bill Buffer backup.",'bad');}
+  render();
+}
+
+document.addEventListener('click',async e=>{
+  const el=e.target.closest('[data-act]');if(!el)return;const a=el.dataset.act;
+  if(a!=='reset'&&a!=='stripNow')confirmReset=null;
+  if(a!=='signOutAll')Sync.confirmAll=false;
+  if(a!=='recheck')confirmRecheck=null;
+  if(a!=='delBill')confirmDel=null;
+  if(a!=='catDel')confirmCat=null;
+  if(a!=='pdel')confirmPerson=null;
+  if(a==='tab'){if(el.dataset.tab==='settings')setSec='';tab=el.dataset.tab;msg=null;pendingRestore=null;editing=null;editingP=null;render();window.scrollTo(0,0);}
+  else if(a==='ownerBills'){tab='bills';ownFilter=el.dataset.id;catFilter='all';editing=null;msg=null;render();window.scrollTo(0,0);}
+  else if(a==='setSec'){setSec=el.dataset.sec;editingP=null;msg=null;pendingRestore=null;confirmReset=null;render();window.scrollTo(0,0);}
+  else if(a==='showWorking'){openWorking=true;tab='now';render();const w=$('.working');if(w)w.scrollIntoView({block:'center'});}
+  else if(a==='clearExample'){clearExampleData();persist();render();}
+  else if(a==='edit'){const id=el.dataset.id;editing=editing===id?null:id;msg=null;render();}
+  else if(a==='new'){editing='new';msg=null;render();const n=$('#e-name');if(n)n.focus();}
+  else if(a==='cancelEdit'){editing=null;editChangesFor=null;msg=null;render();}
+  else if(a==='saveBill')saveBill();
+  else if(a==='chAdd'){
+    const am=parseFloat($('#c-amt').value),fr=$('#c-from').value,un=$('#c-until').value;
+    const err=m=>{const x=$('#e-chmsg');if(x)x.innerHTML=`<div class="msg bad" role="status">${esc(m)}</div>`;};
+    if(!(am>=0))return err('Enter the new amount.');
+    if(parseISO(fr)==null)return err('Enter the date the change starts.');
+    if(un&&parseISO(un)<parseISO(fr))return err('The end date is before the start date.');
+    if(un&&parseISO(un)<today())return err('That end date has already passed.');
+    editChanges.push({id:'c'+Date.now().toString(36),amount:Math.round(am*100)/100,from:fr,until:un||null});
+    $('#e-chlist').innerHTML=changesListHtml();$('#c-amt').value='';$('#c-until').value='';$('#e-chmsg').innerHTML='';
+  }
+  else if(a==='chDel'){editChanges=editChanges.filter(c=>c.id!==el.dataset.id);const l=$('#e-chlist');if(l)l.innerHTML=changesListHtml();}
+  else if(a==='dismissNotice'){Sync.notice='';render();}
+  else if(a==='retry'){if(serverVersion===0&&!Sync.lastOk){Sync.mode='loading';render();boot();}else pullNow();}
+  else if(a==='signOut'){try{await api('POST','logout',{});}catch(e){}signedOut();}
+  else if(a==='signOutAll'){if(!Sync.confirmAll){Sync.confirmAll=true;render();return;}try{await api('POST','logout-all',{});}catch(e){}Sync.confirmAll=false;signedOut();}
+  else if(a==='splitTx')splitTx();
+  else if(a==='recheck'){if(confirmRecheck!==editing){confirmRecheck=editing;render();}else recheck();}
+  else if(a==='delBill'){const id=el.dataset.id;if(confirmDel===id)deleteBill(id);else{confirmDel=id;render();}}
+  else if(a==='dupKeep'){if(!S.notDup.includes(el.dataset.key))S.notDup.push(el.dataset.key);persist();render();}
+  else if(a==='filter'){catFilter=el.dataset.cat;editing=null;render();}
+  else if(a==='showUnassigned'){tab='bills';ownFilter='none';catFilter='all';editing=null;msg=null;render();}
+  else if(a==='ofilter'){ownFilter=el.dataset.own;editing=null;render();}
+  else if(a==='pedit'){const id=el.dataset.id;editingP=editingP===id?null:id;msg=null;render();}
+  else if(a==='pnew'){editingP='new';msg=null;render();const n=$('#p-name');if(n)n.focus();}
+  else if(a==='pcancel'){editingP=null;msg=null;render();}
+  else if(a==='psave')savePerson();
+  else if(a==='pdel'){
+    const id=el.dataset.id;
+    if(confirmPerson!==id){confirmPerson=id;render();return;}
+    S.bills.forEach(b=>{if(b.owner===id)b.owner='';});
+    S.people=S.people.filter(x=>x.id!==id);confirmPerson=null;editingP=null;
+    if(ownFilter===id)ownFilter='all';persist();render();
+  }
+  else if(a==='catColor'){const c=S.categories.find(x=>x.id===el.dataset.id);if(c){c.color=(c.color+1)%8;persist();render();}}
+  else if(a==='catAdd'){const v=$('#newCat').value;if(newCategory(v)){persist();render();}}
+  else if(a==='catDel'){
+    const id=el.dataset.id;
+    if(confirmCat!==id){confirmCat=id;render();return;}
+    S.bills.forEach(b=>{if(b.category===id)b.category='other';});
+    S.categories=S.categories.filter(c=>c.id!==id);confirmCat=null;if(catFilter===id)catFilter='all';persist();render();
+  }
+  else if(a==='unhide'){S.hidden=[];redetect();persist();setMsg('import','Deleted bills brought back.','good');render();}
+  else if(a==='day'){selDay=+el.dataset.d;render();}
+  else if(a==='calPrev'||a==='calNext'){const k=calY*12+calM+(a==='calNext'?1:-1);calY=Math.floor(k/12);calM=k%12;
+    const t=today();const [ty,tm]=ymd(t);selDay=(calY===ty&&calM===tm)?t:D(calY,calM,1);render();}
+  else if(a==='pasteImport'){const v=$('#pasteBox').value;if(!v.trim()){setMsg('import','Paste some rows first.','bad');render();return;}await importTexts([{name:'Pasted rows',text:v}]);}
+  else if(a==='backup')doBackup();
+  else if(a==='restoreNo'){pendingRestore=null;render();}
+  else if(a==='restoreYes'&&pendingRestore){
+    S=cleanState(pendingRestore.state,false);
+    S.meta.lastBackup=pendingRestore.exportedAt||null;S.meta.changed=Date.now()-5000;persist(false);queuePush();
+    pendingRestore=null;editing=null;setMsg('restore','Backup restored.','good');render();
+  }
+  else if(a==='stripNow'){
+    if(confirmReset!=='strip'){confirmReset='strip';render();return;}
+    confirmReset=null;stripStatements();persist();setMsg('strip','Statement details removed. Your bills are unchanged.','good');render();
+  }
+  else if(a==='reset'){
+    const k=el.dataset.kind;
+    if(confirmReset!==k){confirmReset=k;clearTimeout(clearTimer);clearTimer=setTimeout(()=>{confirmReset=null;if(tab==='settings')render();},5000);render();return;}
+    confirmReset=null;editing=null;editingP=null;catFilter='all';ownFilter='all';openSeg.clear();calY=null;
+    const keepMeta=S.meta;
+    if(k==='statements'){S.txns=[];S.files=[];S.hidden=[];S.bills=S.bills.filter(b=>b.src!=='auto'||b.locked);S.example=false;setMsg('reset','Statements cleared. Your own and edited bills are still there.','good');}
+    else if(k==='bills'){S.txns=[];S.files=[];S.hidden=[];S.notDup=[];S.bills=[];S.example=false;setMsg('reset','All bills cleared.','good');}
+    else if(k==='all'){S=defaults();S.meta=keepMeta;setMsg('reset','Everything cleared. Add your people under People and paydays to start.','good');}
+    else if(k==='example'){S=buildExample();S.meta=keepMeta;setMsg('reset','Example loaded.','good');}
+    persist();render();
+  }
+});
+document.addEventListener('change',async e=>{
+  const el=e.target;
+  if(el.dataset.s){
+    setSetting(el);
+  } else if(el.dataset.gone){
+    const t=today();if(!S.paid||S.paid.d!==t)S.paid={d:t,ids:[]};
+    S.paid.ids=S.paid.ids.filter(x=>x!==el.dataset.gone);if(el.checked)S.paid.ids.push(el.dataset.gone);
+    persist();refreshNow();
+  } else if(el.dataset.cat&&el.tagName==='INPUT'){
+    const c=S.categories.find(x=>x.id===el.dataset.cat);if(!c)return;
+    const v=el.value.trim().slice(0,40);if(v){c.name=v;persist();}else el.value=c.name;
+  } else if(el.dataset.qown){
+    const b=S.bills.find(x=>x.id===el.dataset.qown);
+    if(b&&S.people.some(x=>x.id===el.value)){b.owner=el.value;b.locked=true;persist();setMsg('bills',`${b.name} is now paid by ${ownerName(b.owner)}.`,'good');render();}
+  } else if(el.id==='autoStrip'){
+    S.settings.autoStrip=el.checked;persist();
+  } else if(el.id==='e-cat'){
+    const w=$('#e-newwrap');if(w){w.hidden=el.value!=='__new';if(!w.hidden)$('#e-newcat').focus();}
+  } else if(el.id==='fileCsv'){
+    const files=Array.from(el.files||[]);if(!files.length)return;
+    const items=[];for(const f of files)items.push({name:f.name,text:await f.text()});
+    el.value='';await importTexts(items);
+  } else if(el.id==='fileRestore'){
+    const f=el.files&&el.files[0];el.value='';if(f)await onRestoreFile(f);
+  }
+});
+/* Balance and buffer update the figure as you type (after a short pause), not only when you leave the box. */
+function setSetting(el){
+  const k=el.dataset.s,v=el.value===''?'':+el.value;
+  if(S.settings[k]===v||(v!==''&&!isFinite(v)))return;
+  S.settings[k]=v;persist();refreshNow();
+}
+let typingTimer=null;
+document.addEventListener('input',e=>{const el=e.target;if(!el.dataset||!el.dataset.s)return;clearTimeout(typingTimer);typingTimer=setTimeout(()=>setSetting(el),300);});
+document.addEventListener('submit',e=>{const id=e.target&&e.target.id;if(!id)return;
+  if(id==='signinForm'){e.preventDefault();doSignin();}
+  else if(/^pc(On|Change|Off)$/.test(id)){e.preventDefault();passcodeSubmit(id);}});
+document.addEventListener('keydown',e=>{if(e.key!=='Enter')return;if(e.target.id==='newCat'){e.preventDefault();if(newCategory(e.target.value)){persist();render();}}});
+document.addEventListener('toggle',e=>{const d=e.target;if(!d||!d.dataset)return;if(d.classList&&d.classList.contains('working'))openWorking=d.open;if(d.dataset.i!=null){const i=+d.dataset.i;if(d.open)openSeg.add(i);else openSeg.delete(i);}},true);
+
+let wasWide=isWide();window.addEventListener('resize',()=>{const w=isWide();if(w!==wasWide){wasWide=w;render();}});
+boot();
+(async()=>{try{dl=window.claude&&window.claude.use?await window.claude.use('downloads'):null;}catch(e){dl=null;}})();
+/*SW*/
+</script>
