@@ -227,7 +227,8 @@ input:focus,select:focus,textarea:focus{outline:none;box-shadow:3px 3px 0 var(--
 .day{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0;min-height:62px;padding:4px 4px 8px;overflow:hidden;
   border:2px solid var(--edge);border-radius:10px;background:var(--surface);color:var(--ink);font:inherit;text-align:left;cursor:pointer}
 .day.blank{visibility:hidden}
-.day.past{opacity:.35}
+.day.past{opacity:.62}
+.day.past.sel{opacity:1}
 .day.today{background:var(--accent);color:var(--on-tile)}
 .day.sel{box-shadow:3px 3px 0 var(--shadow);transform:translate(-1px,-1px)}
 .day.pay::after{content:"";position:absolute;left:4px;right:4px;bottom:3px;height:5px;border-radius:3px;background:var(--ink)}
@@ -365,7 +366,7 @@ input:focus,select:focus,textarea:focus{outline:none;box-shadow:3px 3px 0 var(--
   .hero .big{font-size:112px}
   /* Calendar: the month on the left, the chosen day beside it */
   .cols.cal{grid-template-columns:minmax(0,1.6fr) minmax(300px,1fr);gap:30px;align-items:start}
-  .cols.cal>.col{position:sticky;top:24px}
+  .cols.cal>.col{display:grid;gap:30px;align-content:start}
   .cols.cal .grid{gap:6px}
   .cols.cal .day{min-height:76px;padding:7px 8px 10px}
   .cols.cal .dn{font-size:15px}
@@ -1049,18 +1050,54 @@ function balanceOn(P,d){
   let b=P.start;for(const [k,x] of P.days){if(k<=d)b=x.bal;else break;}
   return b;
 }
+/* The first day we have real history for: the earliest payment found in the statements. */
+function historyStart(P){
+  let h=null;S.bills.forEach(b=>(b.txs||[]).forEach(x=>{if(h==null||x.d<h)h=x.d;}));
+  return h==null?cycleStart(P):h;
+}
+/* Bills and pay-ins that already happened. A bill found in the statements shows its real payments;
+   any other bill is worked out from its usual date and amount, back to where the history starts. */
+function pastDays(P,from,to){
+  const m=new Map();const get=d=>{let x=m.get(d);if(!x){x={bills:[],pays:[]};m.set(d,x);}return x;};
+  if(!P||to<=from)return m;
+  const h0=historyStart(P);
+  S.bills.filter(b=>b.include&&(b.amount>0||(b.changes||[]).length||(b.txs||[]).length)).forEach(bl=>{
+    if((bl.txs||[]).length)bl.txs.forEach(x=>{if(x.d>=from&&x.d<to)get(x.d).bills.push({d:x.d,bl,amt:x.a,real:true});});
+    else occurrences(bl,Math.max(from,h0),to).forEach(d=>get(d).bills.push({d,bl,amt:amtOn(bl,d)}));
+  });
+  P.people.forEach(r=>payDates(r.p,Math.max(from,h0),to).forEach(d=>{const a=r.amtFor(d);if(a>0)get(d).pays.push({d,person:r.p,amt:a});}));
+  m.forEach(x=>x.bills.sort((a,b)=>b.amt-a.amt));
+  return m;
+}
+/* This cycle starts at the earliest of everyone's latest payday (no further back than a month). */
+function cycleStart(P){
+  let s=null;
+  P.people.forEach(r=>{const ds=payDates(r.p,P.t-62,P.t+1).filter(d=>d<=P.t);if(ds.length&&(s==null||ds[ds.length-1]<s))s=ds[ds.length-1];});
+  return s==null?P.t-14:Math.max(s,P.t-31);
+}
+function cycleHtml(P){
+  const cs=cycleStart(P),t=P.t,items=[];
+  pastDays(P,cs,t).forEach(x=>x.bills.forEach(e=>items.push(e)));
+  S.bills.filter(b=>b.include&&goneToday(b.id,t)).forEach(bl=>occurrences(bl,t,t+1).forEach(d=>items.push({d,bl,amt:amtOn(bl,d)})));
+  items.sort((a,b)=>b.d-a.d||b.amt-a.amt);
+  const tot=items.reduce((n,e)=>n+e.amt,0);
+  const rows=items.map(e=>`<li><span class="n"><i class="dot" style="${cc(e.bl.category)}"></i>${esc(e.bl.name)}<small>${esc(fmtDay(e.d))} · ${esc(ownerName(e.bl.owner))}</small></span><span class="a">${f2(e.amt)}</span></li>`).join('');
+  return `<section class="card flush"><div class="hd"><p class="eyebrow">This cycle so far</p><h2>Paid since ${esc(fmtShort(cs))}</h2>
+    <p>${items.length?plural(items.length,'bill')+', '+f2(tot)+'. Real payments from your statements where there are any, otherwise each bill\'s usual date and amount.':'Nothing has gone out yet this cycle.'}</p></div>${rows?`<ul class="items nod">${rows}</ul>`:''}</section>`;
+}
 function viewCalendar(){
   const P=plan();const t=today();
   if(calY==null){[calY,calM]=ymd(t);selDay=t;}
   const first=D(calY,calM,1),dim=daysInMonth(calY,calM),off=(dow(first)+6)%7;
   const [ty,tm]=ymd(t),[my,mm]=ymd(t+365);
-  const cur=calY*12+calM,canPrev=cur>ty*12+tm,canNext=cur<my*12+mm;
+  const [cy0,cm0]=ymd(P?Math.min(historyStart(P),cycleStart(P)):t),cur=calY*12+calM,canPrev=cur>cy0*12+cm0,canNext=cur<my*12+mm;
+  const pd=pastDays(P,first,Math.min(first+dim,t));
   let cells=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(w=>`<span class="wd">${w}</span>`).join('');
   for(let i=0;i<off;i++)cells+='<span class="day blank"></span>';
   let monthTotal=0;const used=new Set();
   for(let dd=1;dd<=dim;dd++){
-    const d=first+dd-1,past=d<t,x=P&&!past?P.days.get(d):null;
-    const bills=x?x.bills:[];const tot=bills.reduce((n,e)=>n+e.amt,0);monthTotal+=tot;
+    const d=first+dd-1,past=d<t,x=past?pd.get(d):P?P.days.get(d):null;
+    const bills=x?x.bills:[];const tot=bills.reduce((n,e)=>n+e.amt,0);if(!past||cur<ty*12+tm)monthTotal+=tot;
     bills.forEach(e=>used.add(catOf(e.bl.category).id));
     const dots=bills.slice(0,4).map(e=>`<i style="${cc(e.bl.category)}"></i>`).join('')+(bills.length>4?`<b>+${bills.length-4}</b>`:'');
     const cls=[past?'past':'',d===t?'today':'',d===selDay?'sel':'',x&&x.pays.length?'pay':'',x&&x.bal<P.buf-0.004?'low':''].join(' ');
@@ -1072,19 +1109,19 @@ function viewCalendar(){
   // selected day
   let detail='';
   if(selDay!=null){
-    const past=selDay<t,x=P&&!past?P.days.get(selDay):null,b=past?null:balanceOn(P,selDay);
+    const past=selDay<t,x=past?pastDays(P,selDay,selDay+1).get(selDay):P?P.days.get(selDay):null,b=past?null:balanceOn(P,selDay);
     const list=[];
     (x?x.pays:[]).forEach(e=>list.push(`<li class="pay"><span class="n">${esc(putsIn(e.person.name))}${e.today?'<small>Counted in today\'s balance</small>':''}</span><span class="a">+${f2(e.amt)}</span></li>`));
     (x?x.bills:[]).forEach(e=>list.push(`<li><span class="n"><i class="dot" style="${cc(e.bl.category)}"></i>${esc(e.bl.name)}<small>${esc(ownerName(e.bl.owner))} · ${esc(catOf(e.bl.category).name)}</small></span><span class="a">${f2(e.amt)}</span></li>`));
     const close=b!=null?`<li class="tot"><span class="n">${list.length?'Closing balance':'Balance'}</span><span class="a">${f2(b)}</span></li>`:'';
     detail=`<section class="card flush"><div class="hd"><p class="eyebrow">${selDay===t?'Today':past?'Past day':'Selected day'}</p><h2>${esc(fmtFull(selDay))}</h2>
-      ${past?'<p>Past days aren\'t shown.</p>':list.length?'':'<p>No bills due.</p>'}</div>
+      ${past?(list.length?'<p>Real payments from your statements where there are any, otherwise each bill\'s usual date and amount.</p>':'<p>Nothing was due.</p>'):list.length?'':'<p>No bills due.</p>'}</div>
       ${list.length||close?`<ul class="items nod">${list.join('')}${close}</ul>`:''}</section>`;
   }
   return `<div class="cols cal"><section class="card"><div class="calhead"><button class="navb" data-act="calPrev" ${canPrev?'':'disabled'} aria-label="Previous month">‹</button>
-    <div><h2>${esc(fmtMonth(calY,calM))}</h2><small>${monthTotal?f2(monthTotal)+' in bills':'No bills'}${cur===ty*12+tm?' from today':''}</small></div>
+    <div><h2>${esc(fmtMonth(calY,calM))}</h2><small>${monthTotal?f2(monthTotal)+' in bills':'No bills'}${cur===ty*12+tm?' from today':cur<ty*12+tm?' paid':''}</small></div>
     <button class="navb" data-act="calNext" ${canNext?'':'disabled'} aria-label="Next month">›</button></div>
-    <div class="grid">${cells}</div><ul class="legend">${legend}</ul></section><div class="col">${detail}</div></div>`;
+    <div class="grid">${cells}</div><ul class="legend">${legend}</ul></section><div class="col">${detail}${P?cycleHtml(P):''}</div></div>`;
 }
 
 /* ---------- Bills tab ---------- */

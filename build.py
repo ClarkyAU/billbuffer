@@ -12,7 +12,7 @@ import os
 import re
 import shutil
 
-BUILD = 34
+BUILD = 35
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 SRC, SITE, OUT = (os.path.join(ROOT, d) for d in ("src", "site", "build"))
