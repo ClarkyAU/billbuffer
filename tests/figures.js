@@ -28,7 +28,7 @@ const tx=app.extract(process.env.BB_CSV?fs.readFileSync(process.env.BB_CSV,'utf8
 const S0=app.defaults();S0.txns=tx;app.setS(S0);app.redetect();const base=app.getS().bills;if(base.length<5){console.log('FAILED: only '+base.length+' bills found in the statement');process.exit(1);}
 let seed=11;const rnd=()=>{seed=(seed*16807)%2147483647;return seed/2147483647;};
 const freqs=['weekly','fortnightly','fortnightly','4weekly','monthly'],T=app.toISO(app.today()),tnum=app.today();
-let worst=0,fails=[];
+let worst=0,fails=[],nDays=0;
 for(let i=0;i<500;i++){
   const S=app.defaults();S.txns=tx;S.bills=JSON.parse(JSON.stringify(base));const np=1+Math.floor(rnd()*3);
   S.people=Array.from({length:np},(_,j)=>({id:'p'+j,name:'P'+j,nextPayday:app.toISO(tnum+Math.floor(rnd()*15)),freq:freqs[Math.floor(rnd()*5)],payIn:rnd()<.15?String(Math.floor(500+rnd()*2500)):''}));
@@ -38,5 +38,8 @@ for(let i=0;i<500;i++){
   S.settings.buffer=Math.floor(rnd()*500);
   app.setS(S);const P=app.computePlan(),I=independent(S,T),d=Math.abs(P.required-I.required);
   worst=Math.max(worst,d);if(d>0.01||app.toISO(P.until)!==I.until)fails.push({i,app:P.required.toFixed(2),ind:I.required.toFixed(2)});
+  // the calendar's "needed in the account" for later days must match the same check run as if that day were today
+  for(let k=0;k<8;k++){const dd=tnum+1+Math.floor(rnd()*45),Id=independent(S,app.toISO(dd)),dif=Math.abs(P.reqOn(dd)-Id.required);nDays++;
+    worst=Math.max(worst,dif);if(dif>0.01)fails.push({i,day:app.toISO(dd),app:P.reqOn(dd).toFixed(2),ind:Id.required.toFixed(2)});}
 }
-console.log('scenarios with amount changes: 500 | largest difference: $'+worst.toFixed(2)+' | mismatches:',fails.length);fails.slice(0,3).forEach(f=>console.log(' ',JSON.stringify(f)));if(fails.length||worst>0.01)process.exit(1);
+console.log('scenarios with amount changes: 500 | later days checked: '+nDays+' | largest difference: $'+worst.toFixed(2)+' | mismatches:',fails.length);fails.slice(0,3).forEach(f=>console.log(' ',JSON.stringify(f)));if(fails.length||worst>0.01)process.exit(1);
