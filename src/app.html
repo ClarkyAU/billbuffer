@@ -753,16 +753,17 @@ function computePlan(){
   const catRows=S.categories.map(c=>({c,v:cat.get(c.id)||0})).filter(r=>r.v>0).sort((a,b)=>b.v-a.v);
   const ppl=S.people,pids=new Set(ppl.map(x=>x.id));
   const unassigned=act.filter(b=>!pids.has(b.owner));
-  // Each payday, a person puts in what their bills cost per pay, using the amount of each bill's
-  // next payment from that day. A planned change shows up in the pay-ins before it's due.
+  // Each payday, a person puts in what their own bills come to in that pay cycle: every bill due from
+  // that payday up to their next one, at the amount it will be then. So a pay-in changes from one
+  // payday to the next, and a planned change in a bill shows up in the pay-in before it's due.
   const people=ppl.map(x=>{
     const f=FREQ[x.freq]||FREQ.fortnightly,own=act.filter(b=>b.owner===x.id);
-    const perPayOn=d=>own.reduce((n,b)=>{const nd=nextDue(b,d);return n+annualOn(b,nd==null?d:nd);},0)/f.per;
+    const perPayOn=d=>own.reduce((n,b)=>{const nd=nextDue(b,d);return n+annualOn(b,nd==null?d:nd);},0)/f.per;  // average, for judging a fixed amount
+    const cycleOn=d=>{const nx=payDates(x,d+1,d+45)[0],to=nx!=null?nx:d+(f.days||31);return own.reduce((n,b)=>n+occurrences(b,d,to).reduce((m,e)=>m+amtOn(b,e),0),0);};
     const custom=x.payIn!==''&&x.payIn!=null&&!isNaN(+x.payIn),dates=payDates(x,t,end);
-    const amtFor=d=>custom?Math.max(0,+x.payIn):Math.max(0,Math.ceil(perPayOn(d)-1e-9));
-    const next=dates.length?dates[0]:null,perPay=perPayOn(next!=null?next:t),sugg=Math.ceil(perPay-1e-9),payIn=amtFor(next!=null?next:t);
-    let nextChange=null;for(const d of dates){if(d>t+120)break;const a=amtFor(d);if(a!==payIn){nextChange={d,amt:a};break;}}
-    return {p:x,f,nBills:own.length,perPay,sugg,custom,payIn,amtFor,next,dates,nextChange};
+    const amtFor=d=>custom?Math.max(0,+x.payIn):Math.max(0,Math.ceil(cycleOn(d)-1e-9));
+    const next=dates.length?dates[0]:null,perPay=perPayOn(next!=null?next:t),sugg=Math.ceil(cycleOn(next!=null?next:t)-1e-9),payIn=amtFor(next!=null?next:t);
+    return {p:x,f,nBills:own.length,perPay,sugg,custom,payIn,amtFor,next,dates};
   });
   const missing=people.filter(r=>r.next==null).map(r=>r.p.name);
   const ev=[];
@@ -774,8 +775,6 @@ function computePlan(){
   ev.sort((a,b)=>a.d-b.d||(a.pay&&!b.pay?-1:b.pay&&!a.pay?1:b.amt-a.amt));
   // "Right now" covers this pay run and the next one, for everyone: every bill that lands
   // before the end of each person's next pay run, counting the pay-ins that arrive before then.
-  // Pay-ins stay steady (each person's bills spread over their pay cycle), so weekly bills are
-  // always met by the regular pay-in and monthly ones are counted where they actually land.
   // The same figure for any later day: what should be in the account that morning. A pay-in due
   // that day counts as already in, and the bills of that day are still to go.
   const untilOn=d=>{
@@ -958,7 +957,7 @@ function heroWork(P){
 }
 function heroFig(P){
   const sub=P.nAct
-    ?`Covers every bill until ${esc(fmtDay(P.until-1))} and keeps your ${f0(P.buf)} buffer${P.todayPays.length?', counting today\'s pay-ins as already in':''}. Assumes everyone pays in on payday.`
+    ?`Covers every bill until ${esc(fmtDay(P.until-1))} and keeps your ${f0(P.buf)} buffer${P.todayPays.length?', counting today\'s pay-ins as already in':''}. Each pay-in covers that person's bills for their pay cycle.`
     :`No bills yet. Import a statement in Settings, or add a bill on the Bills tab.`;
   let hint='';
   if(P.bal!=null){
@@ -980,7 +979,7 @@ function tilesHtml(P){
   const cols=['c-blue','c-mint','c-lilac','c-sand'],t=[];
   P.people.forEach((r,i)=>t.push(`<button class="tile ${cols[i%4]}" data-act="ownerBills" data-id="${esc(r.p.id)}" aria-label="See ${esc(poss(r.p.name))} bills">
     <span class="tl">${esc(putsIn(r.p.name))}</span><span class="tv">${f0(r.payIn)}</span>
-    <span class="ts">${esc(r.f.label)}${r.next===P.t?' · paid today':r.next!=null?' · next '+esc(fmtShort(r.next)):' · no payday set'}${r.nextChange?` · ${f0(r.nextChange.amt)} from ${esc(fmtShort(r.nextChange.d))}`:''}</span></button>`));
+    <span class="ts">${esc(r.f.label)}${r.next===P.t?' · paid today':r.next!=null?' · next '+esc(fmtShort(r.next)):' · no payday set'}</span></button>`));
   if(P.working.length){
     const lw=P.working.reduce((m,w)=>w.bal<m.bal?w:m,P.working[0]);
     t.push(`<button class="tile c-red" data-act="showWorking"><span class="tl">Tightest day</span><span class="tv">${esc(fmtShort(lw.e.d))}</span><span class="ts">Down to ${f0(lw.bal)} after ${esc(lw.e.pay?(lw.e.person.name==='You'?'your':poss(lw.e.person.name))+' pay-in':lw.e.bl.name)}</span></button>`);

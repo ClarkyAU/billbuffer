@@ -15,12 +15,12 @@ function independent(S,todayISO){
   const T=dt(todayISO),buf=+S.settings.buffer||0,horizon=addDays(T,400);
   const bills=S.bills.filter(b=>b.include&&(b.amount>0||(b.changes||[]).length));
   const people=S.people.map(p=>{const own=bills.filter(b=>b.owner===p.id),custom=(p.payIn!==''&&p.payIn!=null);
-    const nextBill=(b,d)=>billDates(b,dt(d),addDays(dt(d),800))[0];
-    const payOn=d=>custom?+p.payIn:Math.max(0,Math.ceil(own.reduce((n,b)=>{const nb=nextBill(b,d);return n+amountOn(b,nb||d)*perYear[b.cadence];},0)/payPer[p.freq]-1e-9));
+        const payOn=d=>{if(custom)return +p.payIn;const D0=dt(d),nx=payDays(p,addDays(D0,1),addDays(D0,61))[0],end=nx?dt(nx):addDays(D0,p.freq==='monthly'?31:{weekly:7,fortnightly:14,'4weekly':28}[p.freq]);
+      return Math.max(0,Math.ceil(own.reduce((n,b)=>n+billDates(b,D0,end).reduce((m,x)=>m+amountOn(b,x),0),0)-1e-9));};
     return {payOn,dates:payDays(p,T,horizon)};});
   let until=addDays(T,14);people.forEach(r=>{if(!r.dates.length)return;const e=dt(r.dates[r.dates[0]===todayISO?2:1]);if(e>until)until=e;});
   const out={},inn={};bills.forEach(b=>billDates(b,T,until).forEach(d=>(out[d]=out[d]||[]).push(amountOn(b,d))));
-  people.forEach(r=>r.dates.forEach(d=>{if(d!==todayISO)inn[d]=(inn[d]||0)+r.payOn(d);}));
+  people.forEach(r=>r.dates.forEach(d=>{if(d!==todayISO&&dt(d)<until)inn[d]=(inn[d]||0)+r.payOn(d);}));
   let net=0,worst=0;for(let d=T;d<until;d=addDays(d,1)){const k=iso(d);net+=inn[k]||0;for(const a of (out[k]||[])){net-=a;worst=Math.min(worst,net);}}
   return {required:buf-worst,until:iso(until)};
 }
